@@ -170,7 +170,7 @@ async function writeSheetData(sheets, spreadsheetId, sheetTitle, rawData) {
 }
 
 // ── 書式設定 ──
-async function formatSheet(sheets, spreadsheetId, sheetId, dataRowCount) {
+async function formatSheet(sheets, spreadsheetId, sheetId, sheetTitle, dataRowCount) {
   const requests = [
     // ヘッダー行: 白文字・紺背景・太字
     {
@@ -260,6 +260,28 @@ async function formatSheet(sheets, spreadsheetId, sheetId, dataRowCount) {
     spreadsheetId,
     resource: { requests },
   });
+
+  // 自動調整後の列幅を取得して1.5倍に拡大
+  const ssDetail = await sheets.spreadsheets.get({
+    spreadsheetId,
+    fields: 'sheets(properties.sheetId,data.columnMetadata.pixelSize)',
+    ranges: [`'${sheetTitle}'`],
+  });
+  const targetSheet = ssDetail.data.sheets.find(s => s.properties.sheetId === sheetId);
+  if (targetSheet && targetSheet.data && targetSheet.data[0] && targetSheet.data[0].columnMetadata) {
+    const colMeta = targetSheet.data[0].columnMetadata;
+    const resizeRequests = colMeta.slice(0, 11).map((col, idx) => ({
+      updateDimensionProperties: {
+        range: { sheetId, dimension: 'COLUMNS', startIndex: idx, endIndex: idx + 1 },
+        properties: { pixelSize: Math.round(col.pixelSize * 1.5) },
+        fields: 'pixelSize',
+      },
+    }));
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      resource: { requests: resizeRequests },
+    });
+  }
 }
 
 // ── メイン処理 ──
@@ -350,7 +372,7 @@ async function main() {
     // 書式設定
     const sheetId = sheetMap[store.name];
     if (sheetId !== undefined && storeData.raw) {
-      await formatSheet(sheets, spreadsheetId, sheetId, storeData.raw.length);
+      await formatSheet(sheets, spreadsheetId, sheetId, store.name, storeData.raw.length);
     }
   }
 
