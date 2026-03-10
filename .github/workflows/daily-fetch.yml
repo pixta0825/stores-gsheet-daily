@@ -1,0 +1,48 @@
+name: STORES POS → Google Spreadsheet Daily
+
+on:
+  schedule:
+    # 毎日 09:50 JST (= 00:50 UTC)
+    - cron: '50 0 * * *'
+  workflow_dispatch:
+    # 手動実行も可能
+
+jobs:
+  fetch-and-upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Fetch STORES data and upload to Google Sheets
+        env:
+          STORES_EMAIL: ${{ secrets.STORES_EMAIL }}
+          STORES_PASSWORD: ${{ secrets.STORES_PASSWORD }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+          DEST_BOT_TOKEN: ${{ secrets.DEST_BOT_TOKEN }}
+          DEST_CHANNEL_ID: ${{ secrets.DEST_CHANNEL_ID }}
+        run: node index.js
+
+      - name: Upload screenshots as artifact (debug)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ github.run_id }}
+          path: screenshots/
+          retention-days: 7
+          if-no-files-found: ignore

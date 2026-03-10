@@ -1,0 +1,8 @@
+node_modules/
+.env
+screenshots/
+data/
+slack_message.txt
+spreadsheet_url.txt
+credentials.json
+Icon?
