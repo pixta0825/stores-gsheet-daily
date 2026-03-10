@@ -285,6 +285,216 @@ async function formatSheet(sheets, spreadsheetId, sheetId, sheetTitle, dataRowCo
   }
 }
 
+// ── サマリーシート定義 ──
+// 短縮店舗名マッピング
+const SHORT_NAMES = {
+  yyhands_nagoya: 'YY名古屋',
+  yyhands_tokyo: 'YY東京',
+  yyhands_osaka: 'YY大阪',
+  yasumilab_nagoya: 'LAB',
+  '2525jewelry_nagoya': '2525',
+  hello_bonsai: 'BONSAI',
+};
+
+const SUMMARY_SHEETS = [
+  { title: '純売上', colIndex: 1, format: 'CURRENCY', pattern: '¥#,##0', chartTitle: '店舗別売上',     stacked: 'STACKED', lastColLabel: '合計' },
+  { title: '客数',   colIndex: 9, format: 'NUMBER',   pattern: '#,##0',   chartTitle: '店舗別客数',     stacked: 'STACKED', lastColLabel: '合計' },
+  { title: '単価',   colIndex: 10, format: 'CURRENCY', pattern: '¥#,##0', chartTitle: '店舗別売上単価', stacked: null,      lastColLabel: '平均' },
+];
+
+// ── サマリーシート作成（店舗横並び + グラフ）──
+async function createSummarySheets(sheets, spreadsheetId, allData) {
+  // 個別店舗のみ（全店舗を除外）
+  const individualStores = STORES.filter(s => s.slug !== 'all' && allData.stores[s.slug]);
+
+  // 日付リスト（全店舗の日別データから取得、期間合計を除外）
+  const allStoreData = allData.stores['all'];
+  if (!allStoreData || !allStoreData.raw) return;
+  const dailyRows = allStoreData.raw.filter(r => !String(r[0]).includes('期間合計'));
+
+  for (const summary of SUMMARY_SHEETS) {
+    const sheetTitle = summary.title;
+
+    // 現在のシート情報を取得
+    let ssInfo = await sheets.spreadsheets.get({ spreadsheetId });
+    const existingTitles = ssInfo.data.sheets.map(s => s.properties.title);
+
+    // シートが無ければ作成
+    if (!existingTitles.includes(sheetTitle)) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        resource: {
+          requests: [{ addSheet: { properties: { title: sheetTitle } } }],
+        },
+      });
+      ssInfo = await sheets.spreadsheets.get({ spreadsheetId });
+    }
+
+    const sheetObj = ssInfo.data.sheets.find(s => s.properties.title === sheetTitle);
+    const sheetId = sheetObj.properties.sheetId;
+
+    // ヘッダー行: 日付 | 店舗1(短縮) | ... | 合計/平均
+    const shortNames = individualStores.map(s => SHORT_NAMES[s.slug] || s.name);
+    const header = ['日付', ...shortNames, summary.lastColLabel];
+
+    // データ行: "X日" 形式、ゼロは "-"
+    const rows = [header];
+    for (const dayRow of dailyRows) {
+      const fullDate = String(dayRow[0]);
+      // "3月1日（日）" → "1日"
+      const match = fullDate.match(/(\d+)日/);
+      const dateLabel = match ? `${match[1]}日` : fullDate;
+
+      const storeValues = individualStores.map(s => {
+        const sd = allData.stores[s.slug];
+        if (!sd || !sd.raw) return 0;
+        const matchRow = sd.raw.find(r => String(r[0]) === fullDate);
+        return matchRow ? (matchRow[summary.colIndex] || 0) : 0;
+      });
+
+      // 合計/平均
+      let lastCol;
+      if (summary.lastColLabel === '平均') {
+        // 全店舗データから単価を取得（正確な値）
+        lastCol = dayRow[summary.colIndex] || 0;
+      } else {
+        lastCol = storeValues.reduce((a, b) => a + b, 0);
+      }
+
+      // ゼロを "-" に変換
+      const displayValues = storeValues.map(v => v === 0 ? '-' : v);
+      const displayLast = lastCol === 0 ? '-' : lastCol;
+      rows.push([dateLabel, ...displayValues, displayLast]);
+    }
+
+    // シートクリア＆書き込み
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId,
+      range: `'${sheetTitle}'!A:Z`,
+    });
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `'${sheetTitle}'!A1`,
+      valueInputOption: 'RAW',
+      resource: { values: rows },
+    });
+
+    const numCols = header.length;
+    const numDataRows = rows.length - 1;
+
+    // 既存グラフを削除
+    const deleteRequests = [];
+    if (sheetObj.charts) {
+      for (const chart of sheetObj.charts) {
+        deleteRequests.push({ deleteEmbeddedObject: { objectId: chart.chartId } });
+      }
+    }
+    // 既存フィルタを削除
+    if (sheetObj.basicFilter) {
+      deleteRequests.push({ clearBasicFilter: { sheetId } });
+    }
+    if (deleteRequests.length > 0) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        resource: { requests: deleteRequests },
+      });
+    }
+
+    // 書式設定
+    const formatRequests = [
+      // ヘッダー行: 紺背景・白太字
+      {
+        repeatCell: {
+          range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: numCols },
+          cell: {
+            userEnteredFormat: {
+              backgroundColor: { red: 0.16, green: 0.22, blue: 0.38 },
+              textFormat: { foregroundColor: { red: 1, green: 1, blue: 1 }, bold: true, fontFamily: 'Arial', fontSize: 10 },
+              horizontalAlignment: 'CENTER',
+            },
+          },
+          fields: 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)',
+        },
+      },
+      // データ行の配置（右揃え）
+      {
+        repeatCell: {
+          range: { sheetId, startRowIndex: 1, endRowIndex: numDataRows + 1, startColumnIndex: 1, endColumnIndex: numCols },
+          cell: {
+            userEnteredFormat: { horizontalAlignment: 'RIGHT' },
+          },
+          fields: 'userEnteredFormat.horizontalAlignment',
+        },
+      },
+      // 合計/平均列を太字
+      {
+        repeatCell: {
+          range: { sheetId, startRowIndex: 0, endRowIndex: numDataRows + 1, startColumnIndex: numCols - 1, endColumnIndex: numCols },
+          cell: { userEnteredFormat: { textFormat: { bold: true } } },
+          fields: 'userEnteredFormat.textFormat',
+        },
+      },
+      // 列幅自動調整
+      {
+        autoResizeDimensions: {
+          dimensions: { sheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: numCols },
+        },
+      },
+      // フィルタ
+      {
+        setBasicFilter: {
+          filter: {
+            range: { sheetId, startRowIndex: 0, endRowIndex: numDataRows + 1, startColumnIndex: 0, endColumnIndex: numCols },
+          },
+        },
+      },
+    ];
+
+    // グラフ追加
+    const chartWidth = summary.stacked === null ? 1405 : 1080;
+    formatRequests.push({
+      addChart: {
+        chart: {
+          position: {
+            overlayPosition: {
+              anchorCell: { sheetId, rowIndex: numDataRows + 3, columnIndex: 0 },
+              widthPixels: chartWidth,
+              heightPixels: 667,
+            },
+          },
+          spec: {
+            title: summary.chartTitle,
+            basicChart: {
+              chartType: 'COLUMN',
+              legendPosition: 'BOTTOM_LEGEND',
+              stackedType: summary.stacked || 'NOT_STACKED',
+              axis: [
+                { position: 'BOTTOM_AXIS', title: '' },
+                { position: 'LEFT_AXIS', title: '' },
+              ],
+              domains: [{
+                domain: { sourceRange: { sources: [{ sheetId, startRowIndex: 0, endRowIndex: numDataRows + 1, startColumnIndex: 0, endColumnIndex: 1 }] } },
+              }],
+              // 個別店舗のみ（合計/平均列はグラフに含めない）
+              series: shortNames.map((_, idx) => ({
+                series: { sourceRange: { sources: [{ sheetId, startRowIndex: 0, endRowIndex: numDataRows + 1, startColumnIndex: idx + 1, endColumnIndex: idx + 2 }] } },
+                targetAxis: 'LEFT_AXIS',
+              })),
+            },
+          },
+        },
+      },
+    });
+
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      resource: { requests: formatRequests },
+    });
+
+    console.log(`  📊 ${sheetTitle}: ${numDataRows}行 + グラフ作成`);
+  }
+}
+
 // ── メイン処理 ──
 async function main() {
   const monthStr = getTargetMonth();
@@ -376,6 +586,10 @@ async function main() {
       await formatSheet(sheets, spreadsheetId, sheetId, store.name, storeData.raw.length);
     }
   }
+
+  // サマリーシート作成（純売上・客数・単価）
+  console.log('\n📊 サマリーシート作成...');
+  await createSummarySheets(sheets, spreadsheetId, allData);
 
   const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
   console.log(`\n✅ 完了: ${url}`);
