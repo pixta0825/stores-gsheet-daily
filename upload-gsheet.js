@@ -261,7 +261,7 @@ async function formatSheet(sheets, spreadsheetId, sheetId, sheetTitle, dataRowCo
     resource: { requests },
   });
 
-  // 自動調整後の列幅を取得して1.5倍に拡大
+  // 自動調整後、A列の幅を取得して全列をA列幅に統一
   const ssDetail = await sheets.spreadsheets.get({
     spreadsheetId,
     fields: 'sheets(properties.sheetId,data.columnMetadata.pixelSize)',
@@ -269,17 +269,18 @@ async function formatSheet(sheets, spreadsheetId, sheetId, sheetTitle, dataRowCo
   });
   const targetSheet = ssDetail.data.sheets.find(s => s.properties.sheetId === sheetId);
   if (targetSheet && targetSheet.data && targetSheet.data[0] && targetSheet.data[0].columnMetadata) {
-    const colMeta = targetSheet.data[0].columnMetadata;
-    const resizeRequests = colMeta.slice(0, 11).map((col, idx) => ({
-      updateDimensionProperties: {
-        range: { sheetId, dimension: 'COLUMNS', startIndex: idx, endIndex: idx + 1 },
-        properties: { pixelSize: Math.round(col.pixelSize * 1.5) },
-        fields: 'pixelSize',
-      },
-    }));
+    const colAWidth = targetSheet.data[0].columnMetadata[0].pixelSize;
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
-      resource: { requests: resizeRequests },
+      resource: {
+        requests: [{
+          updateDimensionProperties: {
+            range: { sheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: 11 },
+            properties: { pixelSize: colAWidth },
+            fields: 'pixelSize',
+          },
+        }],
+      },
     });
   }
 }
