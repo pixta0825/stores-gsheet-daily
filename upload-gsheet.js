@@ -276,7 +276,7 @@ async function formatSheet(sheets, spreadsheetId, sheetId, sheetTitle, dataRowCo
         requests: [{
           updateDimensionProperties: {
             range: { sheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: 11 },
-            properties: { pixelSize: colAWidth },
+            properties: { pixelSize: Math.round(colAWidth * 1.5) },
             fields: 'pixelSize',
           },
         }],
@@ -303,14 +303,42 @@ const SUMMARY_SHEETS = [
 ];
 
 // ── サマリーシート作成（店舗横並び + グラフ）──
-async function createSummarySheets(sheets, spreadsheetId, allData) {
+async function createSummarySheets(sheets, spreadsheetId, allData, monthStr) {
   // 個別店舗のみ（全店舗を除外）
   const individualStores = STORES.filter(s => s.slug !== 'all' && allData.stores[s.slug]);
 
-  // 日付リスト（全店舗の日別データから取得、期間合計を除外）
   const allStoreData = allData.stores['all'];
   if (!allStoreData || !allStoreData.raw) return;
-  const dailyRows = allStoreData.raw.filter(r => !String(r[0]).includes('期間合計'));
+
+  // 月の日数を計算（月全日分のデータを生成）
+  const year = parseInt(monthStr.substring(0, 4), 10);
+  const mon = parseInt(monthStr.substring(4, 6), 10);
+  const daysInMonth = new Date(year, mon, 0).getDate();
+
+  // 店舗ごとの日別データを day番号 でルックアップ
+  const storeDataByDay = {};
+  for (const store of individualStores) {
+    const sd = allData.stores[store.slug];
+    storeDataByDay[store.slug] = {};
+    if (sd && sd.raw) {
+      for (const r of sd.raw) {
+        const dayMatch = String(r[0]).match(/(\d+)日/);
+        if (dayMatch && !String(r[0]).includes('期間合計')) {
+          storeDataByDay[store.slug][parseInt(dayMatch[1], 10)] = r;
+        }
+      }
+    }
+  }
+  // 全店舗データのルックアップ（単価の平均用）
+  const allStoreByDay = {};
+  for (const r of (allStoreData.raw || [])) {
+    const dayMatch = String(r[0]).match(/(\d+)日/);
+    if (dayMatch && !String(r[0]).includes('期間合計')) {
+      allStoreByDay[parseInt(dayMatch[1], 10)] = r;
+    }
+  }
+
+  const summarySheetIds = [];
 
   for (const summary of SUMMARY_SHEETS) {
     const sheetTitle = summary.title;
@@ -332,39 +360,30 @@ async function createSummarySheets(sheets, spreadsheetId, allData) {
 
     const sheetObj = ssInfo.data.sheets.find(s => s.properties.title === sheetTitle);
     const sheetId = sheetObj.properties.sheetId;
+    summarySheetIds.push(sheetId);
 
     // ヘッダー行: 日付 | 店舗1(短縮) | ... | 合計/平均
     const shortNames = individualStores.map(s => SHORT_NAMES[s.slug] || s.name);
     const header = ['日付', ...shortNames, summary.lastColLabel];
 
-    // データ行: "X日" 形式、ゼロは "-"
+    // 月全日分のデータ行（数値で書き込み、0はフォーマットで"-"表示）
     const rows = [header];
-    for (const dayRow of dailyRows) {
-      const fullDate = String(dayRow[0]);
-      // "3月1日（日）" → "1日"
-      const match = fullDate.match(/(\d+)日/);
-      const dateLabel = match ? `${match[1]}日` : fullDate;
-
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateLabel = `${day}日`;
       const storeValues = individualStores.map(s => {
-        const sd = allData.stores[s.slug];
-        if (!sd || !sd.raw) return 0;
-        const matchRow = sd.raw.find(r => String(r[0]) === fullDate);
-        return matchRow ? (matchRow[summary.colIndex] || 0) : 0;
+        const row = storeDataByDay[s.slug][day];
+        return row ? (row[summary.colIndex] || 0) : 0;
       });
 
-      // 合計/平均
       let lastCol;
       if (summary.lastColLabel === '平均') {
-        // 全店舗データから単価を取得（正確な値）
-        lastCol = dayRow[summary.colIndex] || 0;
+        const allRow = allStoreByDay[day];
+        lastCol = allRow ? (allRow[summary.colIndex] || 0) : 0;
       } else {
         lastCol = storeValues.reduce((a, b) => a + b, 0);
       }
 
-      // ゼロを "-" に変換
-      const displayValues = storeValues.map(v => v === 0 ? '-' : v);
-      const displayLast = lastCol === 0 ? '-' : lastCol;
-      rows.push([dateLabel, ...displayValues, displayLast]);
+      rows.push([dateLabel, ...storeValues, lastCol]);
     }
 
     // シートクリア＆書き込み
@@ -382,14 +401,13 @@ async function createSummarySheets(sheets, spreadsheetId, allData) {
     const numCols = header.length;
     const numDataRows = rows.length - 1;
 
-    // 既存グラフを削除
+    // 既存グラフ・フィルタを削除
     const deleteRequests = [];
     if (sheetObj.charts) {
       for (const chart of sheetObj.charts) {
         deleteRequests.push({ deleteEmbeddedObject: { objectId: chart.chartId } });
       }
     }
-    // 既存フィルタを削除
     if (sheetObj.basicFilter) {
       deleteRequests.push({ clearBasicFilter: { sheetId } });
     }
@@ -399,6 +417,9 @@ async function createSummarySheets(sheets, spreadsheetId, allData) {
         resource: { requests: deleteRequests },
       });
     }
+
+    // 数値フォーマットパターン（ゼロを "-" 表示）
+    const zeroFormat = `${summary.pattern};-${summary.pattern};"-"`;
 
     // 書式設定
     const formatRequests = [
@@ -426,6 +447,18 @@ async function createSummarySheets(sheets, spreadsheetId, allData) {
           fields: 'userEnteredFormat.horizontalAlignment',
         },
       },
+      // 数値フォーマット（ゼロを "-" 表示）
+      {
+        repeatCell: {
+          range: { sheetId, startRowIndex: 1, endRowIndex: numDataRows + 1, startColumnIndex: 1, endColumnIndex: numCols },
+          cell: {
+            userEnteredFormat: {
+              numberFormat: { type: summary.format, pattern: zeroFormat },
+            },
+          },
+          fields: 'userEnteredFormat.numberFormat',
+        },
+      },
       // 合計/平均列を太字
       {
         repeatCell: {
@@ -450,8 +483,9 @@ async function createSummarySheets(sheets, spreadsheetId, allData) {
       },
     ];
 
-    // グラフ追加
+    // グラフ追加（リファレンスのスペックに準拠）
     const chartWidth = summary.stacked === null ? 1405 : 1080;
+    const offsetX = summary.stacked === null ? 6 : 34;
     formatRequests.push({
       addChart: {
         chart: {
@@ -460,16 +494,20 @@ async function createSummarySheets(sheets, spreadsheetId, allData) {
               anchorCell: { sheetId, rowIndex: numDataRows + 3, columnIndex: 0 },
               widthPixels: chartWidth,
               heightPixels: 667,
+              offsetXPixels: offsetX,
+              offsetYPixels: 11,
             },
           },
           spec: {
             title: summary.chartTitle,
+            fontName: 'Roboto',
             basicChart: {
               chartType: 'COLUMN',
               legendPosition: 'BOTTOM_LEGEND',
               stackedType: summary.stacked || 'NOT_STACKED',
+              headerCount: 1,
               axis: [
-                { position: 'BOTTOM_AXIS', title: '' },
+                { position: 'BOTTOM_AXIS', title: '日付' },
                 { position: 'LEFT_AXIS', title: '' },
               ],
               domains: [{
@@ -491,8 +529,44 @@ async function createSummarySheets(sheets, spreadsheetId, allData) {
       resource: { requests: formatRequests },
     });
 
+    // A列の幅を取得して全列をA列幅×1.5に統一
+    const ssDetail = await sheets.spreadsheets.get({
+      spreadsheetId,
+      fields: 'sheets(properties.sheetId,data.columnMetadata.pixelSize)',
+      ranges: [`'${sheetTitle}'`],
+    });
+    const targetSheet = ssDetail.data.sheets.find(s => s.properties.sheetId === sheetId);
+    if (targetSheet && targetSheet.data && targetSheet.data[0] && targetSheet.data[0].columnMetadata) {
+      const colAWidth = targetSheet.data[0].columnMetadata[0].pixelSize;
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        resource: {
+          requests: [{
+            updateDimensionProperties: {
+              range: { sheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: numCols },
+              properties: { pixelSize: Math.round(colAWidth * 1.5) },
+              fields: 'pixelSize',
+            },
+          }],
+        },
+      });
+    }
+
     console.log(`  📊 ${sheetTitle}: ${numDataRows}行 + グラフ作成`);
   }
+
+  // サマリーシートをシートの先頭に移動（純売上→0, 客数→1, 単価→2）
+  const reorderRequests = summarySheetIds.map((sheetId, idx) => ({
+    updateSheetProperties: {
+      properties: { sheetId, index: idx },
+      fields: 'index',
+    },
+  }));
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    resource: { requests: reorderRequests },
+  });
+  console.log('  ✅ サマリーシートを先頭に移動');
 }
 
 // ── メイン処理 ──
@@ -589,7 +663,7 @@ async function main() {
 
   // サマリーシート作成（純売上・客数・単価）
   console.log('\n📊 サマリーシート作成...');
-  await createSummarySheets(sheets, spreadsheetId, allData);
+  await createSummarySheets(sheets, spreadsheetId, allData, monthStr);
 
   const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
   console.log(`\n✅ 完了: ${url}`);
