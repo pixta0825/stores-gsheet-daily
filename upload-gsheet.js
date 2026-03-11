@@ -204,13 +204,13 @@ async function formatSheet(sheets, spreadsheetId, sheetId, sheetTitle, dataRowCo
         fields: 'userEnteredFormat(backgroundColor,textFormat)',
       },
     },
-    // 金額列（B〜H列）に通貨フォーマット
+    // 金額列（B〜H列）に数値フォーマット
     {
       repeatCell: {
         range: { sheetId, startRowIndex: 1, endRowIndex: dataRowCount + 1, startColumnIndex: 1, endColumnIndex: 7 },
         cell: {
           userEnteredFormat: {
-            numberFormat: { type: 'CURRENCY', pattern: '¥#,##0' },
+            numberFormat: { type: 'NUMBER', pattern: '#,##0' },
           },
         },
         fields: 'userEnteredFormat.numberFormat',
@@ -228,13 +228,13 @@ async function formatSheet(sheets, spreadsheetId, sheetId, sheetTitle, dataRowCo
         fields: 'userEnteredFormat.numberFormat',
       },
     },
-    // 単価列（K列）に通貨フォーマット
+    // 単価列（K列）に数値フォーマット
     {
       repeatCell: {
         range: { sheetId, startRowIndex: 1, endRowIndex: dataRowCount + 1, startColumnIndex: 10, endColumnIndex: 11 },
         cell: {
           userEnteredFormat: {
-            numberFormat: { type: 'CURRENCY', pattern: '¥#,##0' },
+            numberFormat: { type: 'NUMBER', pattern: '#,##0' },
           },
         },
         fields: 'userEnteredFormat.numberFormat',
@@ -297,13 +297,13 @@ const SHORT_NAMES = {
 };
 
 const SUMMARY_SHEETS = [
-  { title: '純売上', colIndex: 1, format: 'CURRENCY', pattern: '¥#,##0', chartTitle: '店舗別売上',     stacked: 'STACKED', lastColLabel: '合計' },
-  { title: '客数',   colIndex: 9, format: 'NUMBER',   pattern: '#,##0',   chartTitle: '店舗別客数',     stacked: 'STACKED', lastColLabel: '合計' },
-  { title: '単価',   colIndex: 10, format: 'CURRENCY', pattern: '¥#,##0', chartTitle: '店舗別売上単価', stacked: null,      lastColLabel: '平均' },
+  { title: '純売上', colIndex: 1, format: 'NUMBER', pattern: '#,##0', chartTitle: '店舗別売上',     stacked: 'STACKED', lastColLabel: '合計' },
+  { title: '客数',   colIndex: 9, format: 'NUMBER', pattern: '#,##0', chartTitle: '店舗別客数',     stacked: 'STACKED', lastColLabel: '合計' },
+  { title: '単価',   colIndex: 10, format: 'NUMBER', pattern: '#,##0', chartTitle: '店舗別売上単価', stacked: null,      lastColLabel: '平均' },
 ];
 
 // ── サマリーシート作成（店舗横並び + グラフ）──
-async function createSummarySheets(sheets, spreadsheetId, allData, monthStr) {
+async function createSummarySheets(sheets, spreadsheetId, allData, monthStr, colWidth) {
   // 個別店舗のみ（全店舗を除外）
   const individualStores = STORES.filter(s => s.slug !== 'all' && allData.stores[s.slug]);
 
@@ -529,28 +529,19 @@ async function createSummarySheets(sheets, spreadsheetId, allData, monthStr) {
       resource: { requests: formatRequests },
     });
 
-    // A列の幅を取得して全列をA列幅×1.5に統一
-    const ssDetail = await sheets.spreadsheets.get({
+    // 店舗シートと同じ列幅に統一
+    await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
-      fields: 'sheets(properties.sheetId,data.columnMetadata.pixelSize)',
-      ranges: [`'${sheetTitle}'`],
+      resource: {
+        requests: [{
+          updateDimensionProperties: {
+            range: { sheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: numCols },
+            properties: { pixelSize: colWidth },
+            fields: 'pixelSize',
+          },
+        }],
+      },
     });
-    const targetSheet = ssDetail.data.sheets.find(s => s.properties.sheetId === sheetId);
-    if (targetSheet && targetSheet.data && targetSheet.data[0] && targetSheet.data[0].columnMetadata) {
-      const colAWidth = targetSheet.data[0].columnMetadata[0].pixelSize;
-      await sheets.spreadsheets.batchUpdate({
-        spreadsheetId,
-        resource: {
-          requests: [{
-            updateDimensionProperties: {
-              range: { sheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: numCols },
-              properties: { pixelSize: Math.round(colAWidth * 1.5) },
-              fields: 'pixelSize',
-            },
-          }],
-        },
-      });
-    }
 
     console.log(`  📊 ${sheetTitle}: ${numDataRows}行 + グラフ作成`);
   }
@@ -661,9 +652,24 @@ async function main() {
     }
   }
 
+  // 店舗シートの列幅を取得（サマリーシートにも同じ幅を適用）
+  const firstStoreName = STORES.find(s => allData.stores[s.slug])?.name;
+  let storeColWidth = 100;
+  if (firstStoreName && sheetMap[firstStoreName] !== undefined) {
+    const ssDetailW = await sheets.spreadsheets.get({
+      spreadsheetId,
+      fields: 'sheets(properties.sheetId,data.columnMetadata.pixelSize)',
+      ranges: [`'${firstStoreName}'`],
+    });
+    const ws = ssDetailW.data.sheets.find(s => s.properties.sheetId === sheetMap[firstStoreName]);
+    if (ws?.data?.[0]?.columnMetadata?.[0]) {
+      storeColWidth = ws.data[0].columnMetadata[0].pixelSize;
+    }
+  }
+
   // サマリーシート作成（純売上・客数・単価）
   console.log('\n📊 サマリーシート作成...');
-  await createSummarySheets(sheets, spreadsheetId, allData, monthStr);
+  await createSummarySheets(sheets, spreadsheetId, allData, monthStr, storeColWidth);
 
   const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
   console.log(`\n✅ 完了: ${url}`);
