@@ -1,11 +1,10 @@
 name: STORES POS → Google Spreadsheet Daily
 
 on:
-  schedule:
-    # 毎日 09:00 JST (= 00:00 UTC)
-    - cron: '0 0 * * *'
+  # スケジュールはGAS (WorkflowDispatcher) から workflow_dispatch で起動
+  # 旧cron: '0 0 * * *' (毎日 09:00 JST)
   workflow_dispatch:
-    # 手動実行も可能
+    # 手動実行 / GASトリガーから起動
 
 jobs:
   fetch-and-upload:
