@@ -46,6 +46,14 @@ async function main() {
     // Step 4: yasumi ワークスペースに投稿
     run('post-to-slack.js', 'Slack 投稿');
 
+    // Step 5-6: 月曜なら週次サマリーも投稿
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+    if (now.getDay() === 1) {
+      log('📅 月曜日 → 週次サマリーを追加投稿');
+      run('notify-slack-weekly.js', '週次サマリー生成');
+      run('post-to-slack.js', '週次サマリー投稿');
+    }
+
   } catch (err) {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     log(`\n❌ エラーで中断 (${elapsed}秒経過)`);
