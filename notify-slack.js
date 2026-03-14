@@ -21,9 +21,9 @@ const TARGET_DATE_LABEL = getArg('date');
 // ── 前日の日付ラベルを生成 ──
 function getYesterdayLabel() {
   if (TARGET_DATE_LABEL) return TARGET_DATE_LABEL;
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return `${d.getMonth() + 1}月${d.getDate()}日`;
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+  now.setDate(now.getDate() - 1);
+  return `${now.getMonth() + 1}月${now.getDate()}日`;
 }
 
 // ── 当月のJSONを読み込み ──
