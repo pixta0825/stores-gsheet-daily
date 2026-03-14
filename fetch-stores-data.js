@@ -32,7 +32,7 @@ const POS_ANALYSIS_REDIRECT =
 
 function getMonthString() {
   if (CLI_MONTH) return CLI_MONTH;
-  const d = new Date();
+  const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
@@ -40,7 +40,7 @@ function getYearMonth() {
   if (CLI_MONTH && CLI_MONTH.length === 6) {
     return { year: parseInt(CLI_MONTH.substring(0, 4), 10), month: parseInt(CLI_MONTH.substring(4, 6), 10) };
   }
-  const d = new Date();
+  const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
   return { year: d.getFullYear(), month: d.getMonth() + 1 };
 }
 
