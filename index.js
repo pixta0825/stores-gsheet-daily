@@ -5,6 +5,8 @@
 const { execSync } = require('child_process');
 const path = require('path');
 
+const DRY_RUN = process.argv.includes('--dry-run');
+
 function log(msg) {
   const ts = new Date().toLocaleTimeString('ja-JP');
   console.log(`[${ts}] ${msg}`);
@@ -28,7 +30,7 @@ function run(script, description) {
 async function main() {
   log('═══════════════════════════════════════════');
   log(' STORES POS → Google Spreadsheet + Slack');
-  log(' 一括実行開始');
+  log(` 一括実行開始${DRY_RUN ? ' [DRY-RUN]' : ''}`);
   log('═══════════════════════════════════════════\n');
 
   const startTime = Date.now();
@@ -37,21 +39,27 @@ async function main() {
     // Step 1: STORES からデータ取得 → JSON 保存
     run('fetch-stores-data.js', 'STORES データ取得');
 
-    // Step 2: Google Spreadsheet にアップロード
-    run('upload-gsheet.js', 'Google Spreadsheet アップロード');
+    if (DRY_RUN) {
+      log('[DRY_RUN] Google Spreadsheet アップロード・Slack投稿をスキップ');
+      // メッセージ生成のみ実行（プレビュー用）
+      run('notify-slack.js', 'Slack メッセージ生成（プレビュー）');
+    } else {
+      // Step 2: Google Spreadsheet にアップロード
+      run('upload-gsheet.js', 'Google Spreadsheet アップロード');
 
-    // Step 3: Slack 通知メッセージ生成
-    run('notify-slack.js', 'Slack メッセージ生成');
+      // Step 3: Slack 通知メッセージ生成
+      run('notify-slack.js', 'Slack メッセージ生成');
 
-    // Step 4: yasumi ワークスペースに投稿
-    run('post-to-slack.js', 'Slack 投稿');
+      // Step 4: yasumi ワークスペースに投稿
+      run('post-to-slack.js', 'Slack 投稿');
 
-    // Step 5-6: 月曜なら週次サマリーも投稿
-    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
-    if (now.getDay() === 1) {
-      log('📅 月曜日 → 週次サマリーを追加投稿');
-      run('notify-slack-weekly.js', '週次サマリー生成');
-      run('post-to-slack.js', '週次サマリー投稿');
+      // Step 5-6: 月曜なら週次サマリーも投稿
+      const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+      if (now.getDay() === 1) {
+        log('📅 月曜日 → 週次サマリーを追加投稿');
+        run('notify-slack-weekly.js', '週次サマリー生成');
+        run('post-to-slack.js', '週次サマリー投稿');
+      }
     }
 
   } catch (err) {

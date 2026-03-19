@@ -4,7 +4,11 @@ on:
   # スケジュールはGAS (WorkflowDispatcher) から workflow_dispatch で起動
   # 旧cron: '0 0 * * *' (毎日 09:00 JST)
   workflow_dispatch:
-    # 手動実行 / GASトリガーから起動
+    inputs:
+      dry_run:
+        description: 'Dry-run（Slack投稿・GSheetアップロードをスキップ）'
+        type: boolean
+        default: false
 
 jobs:
   fetch-and-upload:
@@ -35,7 +39,7 @@ jobs:
           GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
           DEST_BOT_TOKEN: ${{ secrets.DEST_BOT_TOKEN }}
           DEST_CHANNEL_ID: ${{ secrets.DEST_CHANNEL_ID }}
-        run: node index.js
+        run: node index.js ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Upload screenshots as artifact (debug)
         if: always()
