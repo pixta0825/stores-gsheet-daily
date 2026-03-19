@@ -380,6 +380,24 @@ async function main() {
     await browser.close();
   }
 
+  // ── 月データ検証 ──
+  // STORESがdate=this_monthをUTC基準で解釈する可能性があるため、
+  // 取得したデータの日付ラベルが期待月と一致するか検証する
+  const firstStoreData = Object.values(allData.stores)[0];
+  if (firstStoreData && firstStoreData.data && firstStoreData.data.daily && firstStoreData.data.daily.length > 0) {
+    const firstLabel = firstStoreData.data.daily[0].label; // e.g. "3月1日（土）"
+    const labelMatch = firstLabel.match(/(\d+)月/);
+    if (labelMatch) {
+      const dataMonth = parseInt(labelMatch[1], 10);
+      if (dataMonth !== month) {
+        log(`⚠️ 月不一致検出: 期待=${month}月, STORESデータ=${dataMonth}月`);
+        log(`   STORESがUTC基準でdate=this_monthを解釈した可能性があります`);
+      } else {
+        log(`✅ 月データ検証OK: ${month}月`);
+      }
+    }
+  }
+
   // JSON保存
   if (!DRY_RUN) {
     const jsonPath = path.join(DATA_DIR, `${monthStr}.json`);
