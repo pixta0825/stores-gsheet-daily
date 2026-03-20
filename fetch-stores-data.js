@@ -30,9 +30,14 @@ const SLOW_MO = HEADLESS ? 0 : 500;
 const POS_ANALYSIS_REDIRECT =
   'https://dashboard.stores.jp/dashboard/api/pos/platform/redirect?app_id=pos_analysis&organization_id=84edf1a5-88c3-4a9f-97cc-e2e5c10ee4fa&u=46d85a523981c1ea29b4910962ac6e5854b0de97f83cf44fa340bf67c7985d4e';
 
+// JST基準の現在日時を取得
+function getJSTDate() {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+}
+
 function getMonthString() {
   if (CLI_MONTH) return CLI_MONTH;
-  const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+  const d = getJSTDate();
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
@@ -40,12 +45,47 @@ function getYearMonth() {
   if (CLI_MONTH && CLI_MONTH.length === 6) {
     return { year: parseInt(CLI_MONTH.substring(0, 4), 10), month: parseInt(CLI_MONTH.substring(4, 6), 10) };
   }
-  const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+  const d = getJSTDate();
   return { year: d.getFullYear(), month: d.getMonth() + 1 };
 }
 
+/**
+ * 明示的な日付範囲パラメータを構築する
+ * date=this_month はSTORESがUTC基準で解釈する可能性があるため、
+ * JST基準の明示的な startDate/endDate を使用する。
+ *
+ * @param {string} dateParam - CLI引数の date パラメータ ('this_month', 'last_month', etc.)
+ * @returns {string} URLクエリパラメータ文字列
+ */
+function buildDateParams(dateParam) {
+  const d = getJSTDate();
+  const year = d.getFullYear();
+  const month = d.getMonth() + 1;
+
+  if (dateParam === 'this_month') {
+    // 今月1日〜今日
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const today = `${year}-${String(month).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return `date=custom&startDate=${startDate}&endDate=${today}`;
+  }
+
+  if (dateParam === 'last_month') {
+    // 前月1日〜前月末日
+    const lastMonth = month === 1 ? 12 : month - 1;
+    const lastMonthYear = month === 1 ? year - 1 : year;
+    const lastDay = new Date(lastMonthYear, lastMonth, 0).getDate();
+    const startDate = `${lastMonthYear}-${String(lastMonth).padStart(2, '0')}-01`;
+    const endDate = `${lastMonthYear}-${String(lastMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    return `date=custom&startDate=${startDate}&endDate=${endDate}`;
+  }
+
+  // それ以外はそのまま使用
+  return `date=${dateParam}`;
+}
+
 function buildStoreUrl(store) {
-  const params = `date=${CLI_DATE_PARAM}&sortColumn=primary&sortDirection=ascending&groupBy=daily`;
+  const dateParams = buildDateParams(CLI_DATE_PARAM);
+  const params = `${dateParams}&sortColumn=primary&sortDirection=ascending&groupBy=daily`;
   const salesChannelParam = store.slug !== 'all'
     ? `&salesChannelId=${STORES.find(s => s.slug === store.slug)?.url?.match(/salesChannelId=([^&]+)/)?.[1] || ''}`
     : '';
@@ -381,7 +421,6 @@ async function main() {
   }
 
   // ── 月データ検証 ──
-  // STORESがdate=this_monthをUTC基準で解釈する可能性があるため、
   // 取得したデータの日付ラベルが期待月と一致するか検証する
   const firstStoreData = Object.values(allData.stores)[0];
   if (firstStoreData && firstStoreData.data && firstStoreData.data.daily && firstStoreData.data.daily.length > 0) {
@@ -391,7 +430,7 @@ async function main() {
       const dataMonth = parseInt(labelMatch[1], 10);
       if (dataMonth !== month) {
         log(`⚠️ 月不一致検出: 期待=${month}月, STORESデータ=${dataMonth}月`);
-        log(`   STORESがUTC基準でdate=this_monthを解釈した可能性があります`);
+        log(`   明示的日付パラメータ使用中にこのエラーが出る場合、STORESの仕様変更の可能性があります`);
       } else {
         log(`✅ 月データ検証OK: ${month}月`);
       }
