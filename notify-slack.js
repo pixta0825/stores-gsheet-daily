@@ -97,11 +97,25 @@ function buildSlackMessage(targetLabel, dailyData, allData) {
 
   let message = `:bar_chart: _${year}年${targetLabel}${dayOfWeek} 売上レポート_\n\n`;
 
-  // 全店舗合計
-  const allStore = dailyData['all'];
-  if (allStore) {
+  // 全店舗合計: 個別店舗データから算出（スクレイピング漏れによる不一致を防止）
+  const individualStores = Object.entries(dailyData)
+    .filter(([slug]) => slug !== 'all');
+  const computedTotal = {
+    netSales: individualStores.reduce((sum, [, d]) => sum + (d.netSales || 0), 0),
+    transactions: individualStores.reduce((sum, [, d]) => sum + (d.transactions || 0), 0),
+  };
+  computedTotal.avgPrice = computedTotal.transactions > 0
+    ? Math.round(computedTotal.netSales / computedTotal.transactions) : 0;
+
+  // スクレイピングした全店舗値と比較ログ出力
+  const scrapedAll = dailyData['all'];
+  if (scrapedAll && scrapedAll.netSales !== computedTotal.netSales) {
+    console.log(`⚠️ 全店舗合計の不一致検出: スクレイピング値=¥${scrapedAll.netSales.toLocaleString()}, 個別合計=¥${computedTotal.netSales.toLocaleString()}`);
+  }
+
+  if (computedTotal.netSales > 0 || (scrapedAll && scrapedAll.netSales > 0)) {
     message += `_*【全店舗合計】*_\n`;
-    message += `純売上: _${formatYen(allStore.netSales)}_\u3000|\u3000件数: _${allStore.transactions}件_\u3000|\u3000単価: _${formatYen(allStore.avgPrice)}_\n\n`;
+    message += `純売上: _${formatYen(computedTotal.netSales)}_\u3000|\u3000件数: _${computedTotal.transactions}件_\u3000|\u3000単価: _${formatYen(computedTotal.avgPrice)}_\n\n`;
   }
 
   // 店舗別（全店舗以外）を売上降順でソート

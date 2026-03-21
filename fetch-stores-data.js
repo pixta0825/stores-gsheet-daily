@@ -396,21 +396,34 @@ async function main() {
     await login(page);
 
     for (const store of STORES) {
-      try {
-        const rawTable = await scrapeStore(page, store);
-        if (rawTable) {
-          const structured = structureData(rawTable);
-          allData.stores[store.slug] = {
-            name: store.name,
-            raw: rawTable,
-            data: structured,
-          };
+      const MAX_RETRIES = 3;
+      let success = false;
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const rawTable = await scrapeStore(page, store);
+          if (rawTable) {
+            const structured = structureData(rawTable);
+            allData.stores[store.slug] = {
+              name: store.name,
+              raw: rawTable,
+              data: structured,
+            };
+            success = true;
+            break;
+          }
+        } catch (err) {
+          log(`  ❌ ${store.name} (試行 ${attempt}/${MAX_RETRIES}): ${err.message}`);
+          await page.screenshot({
+            path: path.join(SCREENSHOT_DIR, `error_${store.slug}_attempt${attempt}.png`),
+          });
+          if (attempt < MAX_RETRIES) {
+            log(`  🔄 ${5}秒後にリトライ...`);
+            await page.waitForTimeout(5000);
+          }
         }
-      } catch (err) {
-        log(`  ❌ ${store.name}: ${err.message}`);
-        await page.screenshot({
-          path: path.join(SCREENSHOT_DIR, `error_${store.slug}.png`),
-        });
+      }
+      if (!success) {
+        log(`  ⚠️ ${store.name}: ${MAX_RETRIES}回試行後も取得失敗`);
       }
       await page.waitForTimeout(2000);
     }
