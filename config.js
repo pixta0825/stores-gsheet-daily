@@ -41,6 +41,11 @@ const STORES = [
     slug: 'hello_bonsai',
     url: `${BASE_URL}?${COMMON_PARAMS}&salesChannelId=6960aeb4e7c5ab0aaa10f966`,
   },
+  {
+    name: 'YYHANDS新宿',
+    slug: 'yyhands_shinjuku',
+    url: `${BASE_URL}?${COMMON_PARAMS}&salesChannelId=69ae3f7326307605f0833d2f`,
+  },
 ];
 
 // xlsxのカラム定義（STORES管理画面のテーブルヘッダーと一致）

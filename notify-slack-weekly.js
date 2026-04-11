@@ -23,6 +23,7 @@ const SHORT_TO_FULL = {
   'LAB': 'YASUMI LAB名古屋',
   '2525': '2525ジュエリー名古屋',
   'BONSAI': 'HELLO BONSAI CLUB',
+  'YY新宿': 'YYHANDS新宿',
 };
 
 // ── Google API 認証 ──
