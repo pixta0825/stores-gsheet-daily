@@ -291,6 +291,7 @@ const SHORT_NAMES = {
   yyhands_nagoya: 'YY名古屋',
   yyhands_tokyo: 'YY東京',
   yyhands_osaka: 'YY大阪',
+  yyhands_shinjuku: 'YY新宿',
   yasumilab_nagoya: 'LAB',
   '2525jewelry_nagoya': '2525',
   hello_bonsai: 'BONSAI',
