@@ -5,6 +5,8 @@
 //   node upload-gsheet.js                    → 当月データをアップロード
 //   node upload-gsheet.js --month=202603     → 指定月
 //   node upload-gsheet.js --dry-run          → プレビューのみ
+//   node upload-gsheet.js --create-only --month=202605
+//                                            → データなしで空シート構造のみ作成
 
 require('dotenv').config();
 const fs = require('fs');
@@ -16,6 +18,7 @@ const { STORES, COLUMNS } = require('./config');
 // ── CLI引数 ──
 const args = process.argv.slice(2);
 const DRY_RUN = args.includes('--dry-run');
+const CREATE_ONLY = args.includes('--create-only');
 function getArg(name) {
   const arg = args.find(a => a.startsWith(`--${name}=`));
   return arg ? arg.split('=')[1] : null;
@@ -30,6 +33,20 @@ function getTargetMonth() {
   if (monthArg) return monthArg;
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
   return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// ── JST 現在日時 ──
+function getJSTNow() {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+}
+
+// ── 翌月のYYYYMM ──
+function computeNextMonth(monthStr) {
+  const year = parseInt(monthStr.substring(0, 4), 10);
+  const mon = parseInt(monthStr.substring(4, 6), 10);
+  const nextMon = mon === 12 ? 1 : mon + 1;
+  const nextYear = mon === 12 ? year + 1 : year;
+  return `${nextYear}${String(nextMon).padStart(2, '0')}`;
 }
 
 // ── Google API 認証 ──
@@ -562,6 +579,20 @@ async function createSummarySheets(sheets, spreadsheetId, allData, monthStr, col
   console.log('  ✅ サマリーシートを先頭に移動');
 }
 
+// ── 空シート構造のみ作成（CREATE_ONLY 用） ──
+async function ensureEmptySpreadsheet(sheets, drive, title) {
+  const existing = await findExistingSpreadsheet(drive, title);
+  if (existing) {
+    console.log(`📄 既存スプレッドシート発見、作成スキップ: ${existing.name} (${existing.id})`);
+    return existing.id;
+  }
+  // 'all' を除く全店舗のシートで新規作成
+  const storeNamesAll = STORES.filter(s => s.slug !== 'all').map(s => s.name);
+  const spreadsheetId = await createSpreadsheet(sheets, drive, title, storeNamesAll);
+  console.log(`✅ 空スプレッドシート作成: https://docs.google.com/spreadsheets/d/${spreadsheetId}`);
+  return spreadsheetId;
+}
+
 // ── メイン処理 ──
 async function main() {
   const monthStr = getTargetMonth();
@@ -574,8 +605,18 @@ async function main() {
   console.log(` 対象月: ${year}年${month}月`);
   console.log(` スプレッドシート名: ${title}`);
   console.log(` フォルダ ID: ${FOLDER_ID}`);
-  console.log(` モード: ${DRY_RUN ? 'DRY_RUN' : '本番'}`);
+  console.log(` モード: ${CREATE_ONLY ? 'CREATE_ONLY（空シート作成のみ）' : (DRY_RUN ? 'DRY_RUN' : '本番')}`);
   console.log('═══════════════════════════════════════════\n');
+
+  // CREATE_ONLY: データ不要、空シート構造のみ作成して終了
+  if (CREATE_ONLY) {
+    const auth = getAuth();
+    const sheets = google.sheets({ version: 'v4', auth });
+    const drive = google.drive({ version: 'v3', auth });
+    await verifyFolderAccess(drive);
+    const spreadsheetId = await ensureEmptySpreadsheet(sheets, drive, title);
+    return `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
+  }
 
   // JSONデータ読み込み
   const jsonPath = path.join(DATA_DIR, `${monthStr}.json`);
@@ -678,6 +719,19 @@ async function main() {
 
   // URLをファイルに保存（Slack通知で使用）
   fs.writeFileSync(path.join(__dirname, 'spreadsheet_url.txt'), url, 'utf-8');
+
+  // 月末（28日以降）に翌月分の空スプシを先回り作成
+  const nowJST = getJSTNow();
+  if (nowJST.getDate() >= 28) {
+    const nextMonth = computeNextMonth(monthStr);
+    const nextTitle = `STORES_売上_${nextMonth}`;
+    console.log(`\n📅 月末先回り: 翌月分 ${nextTitle} を確認...`);
+    try {
+      await ensureEmptySpreadsheet(sheets, drive, nextTitle);
+    } catch (e) {
+      console.error(`  ⚠️  翌月先回り失敗（続行）: ${e.message}`);
+    }
+  }
 
   return url;
 }
