@@ -9,6 +9,14 @@ on:
         description: 'Dry-run（Slack投稿・GSheetアップロードをスキップ）'
         type: boolean
         default: false
+      create_only:
+        description: '空シート構造のみ作成（fetch/Slackをスキップ）'
+        type: boolean
+        default: false
+      month:
+        description: '対象月 YYYYMM（create_only時のみ使用、空欄なら当月）'
+        required: false
+        default: ''
 
 jobs:
   fetch-and-upload:
@@ -29,9 +37,23 @@ jobs:
         run: npm ci
 
       - name: Install Playwright Chromium
+        if: ${{ github.event.inputs.create_only != 'true' }}
         run: npx playwright install --with-deps chromium
 
+      - name: Create empty spreadsheet only
+        if: ${{ github.event.inputs.create_only == 'true' }}
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+        run: |
+          MONTH_ARG=""
+          if [ -n "${{ github.event.inputs.month }}" ]; then
+            MONTH_ARG="--month=${{ github.event.inputs.month }}"
+          fi
+          node upload-gsheet.js --create-only $MONTH_ARG
+
       - name: Fetch STORES data and upload to Google Sheets
+        if: ${{ github.event.inputs.create_only != 'true' }}
         env:
           STORES_EMAIL: ${{ secrets.STORES_EMAIL }}
           STORES_PASSWORD: ${{ secrets.STORES_PASSWORD }}
