@@ -7,7 +7,40 @@ const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
 
-const { STORES, BASE_URL } = require('./config');
+const { STORES: STORES_FALLBACK, BASE_URL } = require('./config');
+
+const MASTER_PATH = require('path').join(__dirname, 'data', 'stores_master.json');
+
+// 起動時に店舗リストを解決する：
+// - data/stores_master.json があればそれを優先（動的に最新の店舗構成）
+// - 無ければ config.js の STORES (=STORES_FALLBACK) を使う
+function loadStores() {
+  try {
+    if (fs.existsSync(MASTER_PATH)) {
+      const m = JSON.parse(fs.readFileSync(MASTER_PATH, 'utf-8'));
+      if (Array.isArray(m.stores) && m.stores.length >= 2) {
+        return m.stores.map(s => ({
+          name: s.name,
+          slug: s.slug,
+          salesChannelId: s.salesChannelId,
+        }));
+      }
+    }
+  } catch (e) {
+    console.warn(`⚠️ stores_master.json 読み込み失敗: ${e.message}. config.js にフォールバックします`);
+  }
+  // フォールバック：config.js の STORES を salesChannelId 抽出済み形式に変換
+  return STORES_FALLBACK.map(s => {
+    const m = s.url.match(/salesChannelId=([^&]+)/);
+    return {
+      name: s.name,
+      slug: s.slug,
+      salesChannelId: m ? m[1] : null,
+    };
+  });
+}
+
+const STORES = loadStores();
 
 // ── CLI引数解析 ──
 const args = process.argv.slice(2);
@@ -86,8 +119,8 @@ function buildDateParams(dateParam) {
 function buildStoreUrl(store) {
   const dateParams = buildDateParams(CLI_DATE_PARAM);
   const params = `${dateParams}&sortColumn=primary&sortDirection=ascending&groupBy=daily`;
-  const salesChannelParam = store.slug !== 'all'
-    ? `&salesChannelId=${STORES.find(s => s.slug === store.slug)?.url?.match(/salesChannelId=([^&]+)/)?.[1] || ''}`
+  const salesChannelParam = store.salesChannelId
+    ? `&salesChannelId=${store.salesChannelId}`
     : '';
   return `${BASE_URL}?${params}${salesChannelParam}`;
 }

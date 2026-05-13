@@ -1,0 +1,59 @@
+name: Update Stores Master (weekly)
+
+on:
+  schedule:
+    # 毎週日曜 00:00 UTC = 09:00 JST
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+
+jobs:
+  update-master:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run update-stores-master.js
+        env:
+          STORES_EMAIL: ${{ secrets.STORES_EMAIL }}
+          STORES_PASSWORD: ${{ secrets.STORES_PASSWORD }}
+          HEADLESS: 'true'
+        run: node update-stores-master.js
+
+      - name: Commit and push if changed
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain data/stores_master.json)" ]; then
+            git add data/stores_master.json
+            git commit -m "chore: update stores_master.json (weekly auto)"
+            git push
+            echo "✅ stores_master.json を更新しました"
+          else
+            echo "ℹ️ 差分なし、コミットスキップ"
+          fi
+
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ github.run_id }}
+          path: screenshots/
+          retention-days: 7
+          if-no-files-found: ignore

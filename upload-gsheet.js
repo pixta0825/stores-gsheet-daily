@@ -13,7 +13,24 @@ const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
 
-const { STORES, COLUMNS } = require('./config');
+const { STORES: STORES_FALLBACK, COLUMNS } = require('./config');
+
+// 起動時に店舗リストを解決：master.json 優先、config.js フォールバック
+function loadStores() {
+  try {
+    const masterPath = require('path').join(__dirname, 'data', 'stores_master.json');
+    if (require('fs').existsSync(masterPath)) {
+      const m = JSON.parse(require('fs').readFileSync(masterPath, 'utf-8'));
+      if (Array.isArray(m.stores) && m.stores.length >= 2) {
+        return m.stores.map(s => ({ name: s.name, slug: s.slug, salesChannelId: s.salesChannelId }));
+      }
+    }
+  } catch (e) {
+    console.warn(`⚠️ stores_master.json 読み込み失敗: ${e.message}`);
+  }
+  return STORES_FALLBACK.map(s => ({ name: s.name, slug: s.slug, salesChannelId: (s.url.match(/salesChannelId=([^&]+)/) || [])[1] || null }));
+}
+const STORES = loadStores();
 
 // ── CLI引数 ──
 const args = process.argv.slice(2);
@@ -309,8 +326,10 @@ const SHORT_NAMES = {
   yyhands_tokyo: 'YY東京',
   yyhands_osaka: 'YY大阪',
   yyhands_shinjuku: 'YY新宿',
-  yyhands_shinjuku: 'YY新宿',
-  yasumilab_nagoya: 'LAB',
+  yyhands_shibuya: 'YY渋谷',
+  yyhands_harajuku: 'YY原宿',
+  yasumilab_nagoya: 'LAB名古屋',
+  yasumilab_tokyo: 'LAB東京',
   '2525jewelry_nagoya': '2525',
   hello_bonsai: 'BONSAI',
 };

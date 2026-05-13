@@ -46,6 +46,21 @@ const STORES = [
     slug: 'yyhands_shinjuku',
     url: `${BASE_URL}?${COMMON_PARAMS}&salesChannelId=69ae3f7326307605f0833d2f`,
   },
+  {
+    name: 'YASUMI LAB TOKYO',
+    slug: 'yasumilab_tokyo',
+    url: `${BASE_URL}?${COMMON_PARAMS}&salesChannelId=69e03136d9e28df3f61314ba`,
+  },
+  {
+    name: 'YYHANDS渋谷',
+    slug: 'yyhands_shibuya',
+    url: `${BASE_URL}?${COMMON_PARAMS}&salesChannelId=69f43c0d248f8c08e31ba380`,
+  },
+  {
+    name: 'YYHANDS原宿',
+    slug: 'yyhands_harajuku',
+    url: `${BASE_URL}?${COMMON_PARAMS}&salesChannelId=69f43d5cfc56600a9d3552c2`,
+  },
 ];
 
 // xlsxのカラム定義（STORES管理画面のテーブルヘッダーと一致）

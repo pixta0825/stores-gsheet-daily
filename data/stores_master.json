@@ -1,0 +1,73 @@
+{
+  "generatedAt": "2026-05-13T03:56:49.527Z",
+  "source": "POS分析画面プルダウン (button[data-testid=\"button\"] + role=option)",
+  "storeCount": 11,
+  "stores": [
+    {
+      "rawName": "全店舗",
+      "name": "全店舗",
+      "slug": "all",
+      "salesChannelId": null
+    },
+    {
+      "rawName": "Y! Y! hands名古屋",
+      "name": "YY HANDS名古屋",
+      "slug": "yyhands_nagoya",
+      "salesChannelId": "681b02b1b7ac330049f2abcc"
+    },
+    {
+      "rawName": "Y! Y! hands東京",
+      "name": "YYHANDS東京",
+      "slug": "yyhands_tokyo",
+      "salesChannelId": "6940c8274683791b9ae0058a"
+    },
+    {
+      "rawName": "Y! Y! hands大阪",
+      "name": "YYHANDS大阪",
+      "slug": "yyhands_osaka",
+      "salesChannelId": "6940c855e0c48f1a99481d83"
+    },
+    {
+      "rawName": "YASUMI LAB NAGOYA",
+      "name": "YASUMI LAB名古屋",
+      "slug": "yasumilab_nagoya",
+      "salesChannelId": "6940c871bd17481c37c99de9"
+    },
+    {
+      "rawName": "2525ジュエリー名古屋",
+      "name": "2525ジュエリー名古屋",
+      "slug": "2525jewelry_nagoya",
+      "salesChannelId": "6940c888bd17481c37c99dea"
+    },
+    {
+      "rawName": "HELLO BONSAI CLUB",
+      "name": "HELLO BONSAI CLUB",
+      "slug": "hello_bonsai",
+      "salesChannelId": "6960aeb4e7c5ab0aaa10f966"
+    },
+    {
+      "rawName": "Y! Y! hands新宿",
+      "name": "YYHANDS新宿",
+      "slug": "yyhands_shinjuku",
+      "salesChannelId": "69ae3f7326307605f0833d2f"
+    },
+    {
+      "rawName": "YASUMI LAB TOKYO",
+      "name": "YASUMI LAB TOKYO",
+      "slug": "yasumilab_tokyo",
+      "salesChannelId": "69e03136d9e28df3f61314ba"
+    },
+    {
+      "rawName": "Y! Y! hands渋谷",
+      "name": "YYHANDS渋谷",
+      "slug": "yyhands_shibuya",
+      "salesChannelId": "69f43c0d248f8c08e31ba380"
+    },
+    {
+      "rawName": "Y! Y! hands原宿",
+      "name": "YYHANDS原宿",
+      "slug": "yyhands_harajuku",
+      "salesChannelId": "69f43d5cfc56600a9d3552c2"
+    }
+  ]
+}
