@@ -16,7 +16,7 @@ function getArg(name) {
   const arg = args.find(a => a.startsWith(`--${name}=`));
   return arg ? arg.split('=')[1] : null;
 }
-const TARGET_DATE_LABEL = getArg('date');
+const TARGET_DATE_LABEL = getArg('date') || process.env.FORCE_TARGET_DATE || null;
 
 // ── 前日の日付ラベルを生成 ──
 function getYesterdayLabel() {
@@ -27,19 +27,22 @@ function getYesterdayLabel() {
 }
 
 // ── 当月のJSONを読み込み ──
+// 月次データファイル（YYYYMM.json）のみを対象とする。
+// stores_master.json などの設定ファイルは除外する。
 function loadCurrentMonthData() {
   if (!fs.existsSync(DATA_DIR)) {
     console.error('❌ data/ フォルダがありません');
     process.exit(1);
   }
 
+  const monthFilePattern = /^\d{6}\.json$/;
   const jsonFiles = fs.readdirSync(DATA_DIR)
-    .filter(f => f.endsWith('.json'))
+    .filter(f => monthFilePattern.test(f))
     .sort()
     .reverse();
 
   if (jsonFiles.length === 0) {
-    console.error('❌ JSONファイルがありません');
+    console.error('❌ 月次JSONファイル（YYYYMM.json）がありません');
     process.exit(1);
   }
 
@@ -64,6 +67,33 @@ function extractDailyData(allData, targetLabel) {
   }
 
   return results;
+}
+
+// ── ラベル「M月D日（曜）」から月日を抽出 ──
+function parseMonthDay(label) {
+  const m = label.match(/(\d+)月(\d+)日/);
+  if (!m) return null;
+  return { month: parseInt(m[1], 10), day: parseInt(m[2], 10) };
+}
+
+// ── 全店舗を走査し、売上のある最新の日付ラベル（M月D日）を返す ──
+// STORES側のデータ反映遅延で対象日が無い場合のフォールバック用
+function findLatestAvailableLabel(allData) {
+  let best = null; // { month, day, label }
+
+  for (const store of Object.values(allData.stores)) {
+    const daily = store.data?.daily || [];
+    for (const rec of daily) {
+      if (!rec || (rec.netSales || 0) <= 0) continue;
+      const md = parseMonthDay(rec.label);
+      if (!md) continue;
+      if (!best || md.month > best.month || (md.month === best.month && md.day > best.day)) {
+        best = { ...md, label: `${md.month}月${md.day}日` };
+      }
+    }
+  }
+
+  return best ? best.label : null;
 }
 
 // ── 金額フォーマット ──
@@ -91,11 +121,15 @@ function getDayOfWeek(label, year) {
 }
 
 // ── Slackメッセージを組み立て ──
-function buildSlackMessage(targetLabel, dailyData, allData) {
+function buildSlackMessage(targetLabel, dailyData, allData, options = {}) {
   const year = allData.year;
   const dayOfWeek = getDayOfWeek(targetLabel, year);
 
-  let message = `:bar_chart: _${year}年${targetLabel}${dayOfWeek} 売上レポート_\n\n`;
+  let message = '';
+  if (options.fallbackNoticeFor) {
+    message += `:warning: _${options.fallbackNoticeFor} のデータがSTORES側にまだ反映されていないため、直近の ${targetLabel} の売上を掲載します_\n\n`;
+  }
+  message += `:bar_chart: _${year}年${targetLabel}${dayOfWeek} 売上レポート_\n\n`;
 
   // 全店舗合計: 個別店舗データから算出（スクレイピング漏れによる不一致を防止）
   const individualStores = Object.entries(dailyData)
@@ -154,22 +188,44 @@ function buildSlackMessage(targetLabel, dailyData, allData) {
 
 // ── メイン処理 ──
 function main() {
-  const targetLabel = getYesterdayLabel();
-  console.log(`🔍 対象日: ${targetLabel}`);
+  const requestedLabel = getYesterdayLabel();
+  console.log(`🔍 対象日: ${requestedLabel}`);
 
   const allData = loadCurrentMonthData();
-  const dailyData = extractDailyData(allData, targetLabel);
+  let effectiveLabel = requestedLabel;
+  let fallbackNoticeFor = null;
+  let dailyData = extractDailyData(allData, requestedLabel);
 
-  const storeCount = Object.keys(dailyData).length;
-  if (storeCount === 0) {
-    console.error(`❌ ${targetLabel} のデータが見つかりません`);
-    console.log('  ヒント: まず node fetch-stores-data.js でデータを取得してください');
-    process.exit(1);
+  // フォールバック: 対象日が見つからない場合、直近の売上ありの日に切り替え
+  if (Object.keys(dailyData).length === 0) {
+    const fallback = findLatestAvailableLabel(allData);
+    if (fallback && fallback !== requestedLabel) {
+      console.log(`⚠️ ${requestedLabel} のデータが見つかりません。フォールバック日: ${fallback}（理由: 対象日のデータ未到着）`);
+      effectiveLabel = fallback;
+      fallbackNoticeFor = requestedLabel;
+      dailyData = extractDailyData(allData, fallback);
+    }
   }
 
-  console.log(`✅ ${storeCount} 店舗のデータを検出`);
+  // それでも空ならデータ未到着の警告メッセージのみ生成して exit 0
+  if (Object.keys(dailyData).length === 0) {
+    console.log(`⚠️ ${requestedLabel} を含むデータがいずれの店舗にも見つかりません。データ未到着の警告メッセージを生成します。`);
+    const urlPath = path.join(__dirname, 'spreadsheet_url.txt');
+    const spreadsheetUrl = fs.existsSync(urlPath) ? fs.readFileSync(urlPath, 'utf-8').trim() : '';
+    let message = `:warning: _${requestedLabel} のSTORES POS 日次データが取得できませんでした。STORES側の集計遅延の可能性があります。_\n`;
+    if (spreadsheetUrl) {
+      message += `\n:link: <${spreadsheetUrl}|Google Spreadsheet>（スプレッドシートは更新済みです）`;
+    }
+    const outputPath = path.join(__dirname, 'slack_message.txt');
+    fs.writeFileSync(outputPath, message, 'utf-8');
+    console.log(`💾 警告メッセージ保存: ${outputPath}`);
+    return;
+  }
 
-  const message = buildSlackMessage(targetLabel, dailyData, allData);
+  const storeCount = Object.keys(dailyData).length;
+  console.log(`✅ ${storeCount} 店舗のデータを検出（対象日=${effectiveLabel}）`);
+
+  const message = buildSlackMessage(effectiveLabel, dailyData, allData, { fallbackNoticeFor });
 
   console.log('\n── Slackメッセージプレビュー ──');
   console.log(message);

@@ -17,6 +17,10 @@ on:
         description: '対象月 YYYYMM（create_only時のみ使用、空欄なら当月）'
         required: false
         default: ''
+      force_target_date:
+        description: 'Slack通知の対象日を明示指定（例: 5月13日）。空欄なら前日'
+        required: false
+        default: ''
 
 jobs:
   fetch-and-upload:
@@ -61,6 +65,7 @@ jobs:
           GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
           DEST_BOT_TOKEN: ${{ secrets.DEST_BOT_TOKEN }}
           DEST_CHANNEL_ID: ${{ secrets.DEST_CHANNEL_ID }}
+          FORCE_TARGET_DATE: ${{ github.event.inputs.force_target_date }}
         run: node index.js ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Upload screenshots as artifact (debug)
