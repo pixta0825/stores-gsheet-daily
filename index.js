@@ -12,10 +12,11 @@ function log(msg) {
   console.log(`[${ts}] ${msg}`);
 }
 
-function run(script, description) {
+function run(script, description, extraArgs = '') {
   log(`▶ ${description}...`);
+  const cmd = `node ${path.join(__dirname, script)}${extraArgs ? ' ' + extraArgs : ''}`;
   try {
-    execSync(`node ${path.join(__dirname, script)}`, {
+    execSync(cmd, {
       stdio: 'inherit',
       env: process.env,
       cwd: __dirname,
@@ -27,6 +28,14 @@ function run(script, description) {
   }
 }
 
+// 前月のYYYYMMを返す（JST基準の現在月から1つ前）
+function computePrevMonth() {
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+  const year = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+  const mon = now.getMonth() === 0 ? 12 : now.getMonth(); // getMonth()は0始まり=前月の値
+  return `${year}${String(mon).padStart(2, '0')}`;
+}
+
 async function main() {
   log('═══════════════════════════════════════════');
   log(' STORES POS → Google Spreadsheet + Slack');
@@ -36,6 +45,24 @@ async function main() {
   const startTime = Date.now();
 
   try {
+    // Step 0: 月初なら前月を締める
+    // 月末日は完全データが翌月1日にしか取れず、その時には当月シートへ書かれてしまうため、
+    // 毎月1日の実行時のみ、前月を last_month レンジで再取得して前月シートを上書きする。
+    // Slack投稿はしない（当月の前日分のみ後段で投稿）。失敗しても当月処理は継続する。
+    if (!DRY_RUN) {
+      const jstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+      if (jstNow.getDate() === 1) {
+        const prevMonth = computePrevMonth();
+        log(`📅 月初検知 → 前月(${prevMonth})の締め処理を先に実行`);
+        try {
+          run('fetch-stores-data.js', `前月締め: データ取得 (${prevMonth})`, `--month=${prevMonth} --date=last_month`);
+          run('upload-gsheet.js', `前月締め: シート上書き (${prevMonth})`, `--month=${prevMonth}`);
+        } catch (err) {
+          log(`⚠️ 前月締め処理に失敗（当月処理は継続）: ${err.message}`);
+        }
+      }
+    }
+
     // Step 1: STORES からデータ取得 → JSON 保存
     run('fetch-stores-data.js', 'STORES データ取得');
 
