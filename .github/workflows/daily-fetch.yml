@@ -21,6 +21,10 @@ on:
         description: 'Slack通知の対象日を明示指定（例: 5月13日）。空欄なら前日'
         required: false
         default: ''
+      backfill_month:
+        description: '指定月を再取得して該当月シートを上書き（前月の月末締め用 例:202605）。Slack投稿はしない'
+        required: false
+        default: ''
 
 jobs:
   fetch-and-upload:
@@ -57,7 +61,7 @@ jobs:
           node upload-gsheet.js --create-only $MONTH_ARG
 
       - name: Fetch STORES data and upload to Google Sheets
-        if: ${{ github.event.inputs.create_only != 'true' }}
+        if: ${{ github.event.inputs.create_only != 'true' && github.event.inputs.backfill_month == '' }}
         env:
           STORES_EMAIL: ${{ secrets.STORES_EMAIL }}
           STORES_PASSWORD: ${{ secrets.STORES_PASSWORD }}
@@ -67,6 +71,19 @@ jobs:
           DEST_CHANNEL_ID: ${{ secrets.DEST_CHANNEL_ID }}
           FORCE_TARGET_DATE: ${{ github.event.inputs.force_target_date }}
         run: node index.js ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
+
+      # 月末締め用バックフィル：指定月（前月）を再取得して該当月シートを上書き。Slack投稿はしない。
+      - name: Backfill specific month
+        if: ${{ github.event.inputs.create_only != 'true' && github.event.inputs.backfill_month != '' }}
+        env:
+          STORES_EMAIL: ${{ secrets.STORES_EMAIL }}
+          STORES_PASSWORD: ${{ secrets.STORES_PASSWORD }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+        run: |
+          M="${{ github.event.inputs.backfill_month }}"
+          node fetch-stores-data.js --month=$M --date=last_month
+          node upload-gsheet.js --month=$M
 
       - name: Upload screenshots as artifact (debug)
         if: always()
