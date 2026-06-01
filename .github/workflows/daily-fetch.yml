@@ -33,6 +33,10 @@ on:
         description: '事故復旧：データの実体があるソース月YYYYMM（例:202606）'
         required: false
         default: ''
+      clear_month:
+        description: '事故復旧：このYYYYMMシートの全タブの値を空にする（構造は保持。誤データ消去用 例:202606）'
+        required: false
+        default: ''
 
 jobs:
   fetch-and-upload:
@@ -53,7 +57,7 @@ jobs:
         run: npm ci
 
       - name: Install Playwright Chromium
-        if: ${{ github.event.inputs.create_only != 'true' && github.event.inputs.recover_target_month == '' }}
+        if: ${{ github.event.inputs.create_only != 'true' && github.event.inputs.recover_target_month == '' && github.event.inputs.clear_month == '' }}
         run: npx playwright install --with-deps chromium
 
       - name: Create empty spreadsheet only
@@ -69,7 +73,7 @@ jobs:
           node upload-gsheet.js --create-only $MONTH_ARG
 
       - name: Fetch STORES data and upload to Google Sheets
-        if: ${{ github.event.inputs.create_only != 'true' && github.event.inputs.backfill_month == '' && github.event.inputs.recover_target_month == '' }}
+        if: ${{ github.event.inputs.create_only != 'true' && github.event.inputs.backfill_month == '' && github.event.inputs.recover_target_month == '' && github.event.inputs.clear_month == '' }}
         env:
           STORES_EMAIL: ${{ secrets.STORES_EMAIL }}
           STORES_PASSWORD: ${{ secrets.STORES_PASSWORD }}
@@ -104,6 +108,14 @@ jobs:
           TGT="${{ github.event.inputs.recover_target_month }}"
           node recover-from-sheet.js --source=$SRC --target=$TGT
           node upload-gsheet.js --month=$TGT
+
+      # 事故復旧：指定月シートの全タブの値を空にする（構造は保持）。誤データ消去用。
+      - name: Clear month sheet values
+        if: ${{ github.event.inputs.clear_month != '' }}
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+        run: node recover-from-sheet.js --clear=${{ github.event.inputs.clear_month }}
 
       - name: Upload screenshots as artifact (debug)
         if: always()

@@ -24,6 +24,7 @@ function getArg(name) {
 
 const SOURCE = getArg('source'); // 例: 202606（データの実体がある月シート）
 const TARGET = getArg('target'); // 例: 202605（本来入るべき月シート用のJSONを作る）
+const CLEAR = getArg('clear');   // 例: 202606（このシートの全タブの値をクリアして空に戻す。構造は保持）
 const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || '1ZiZE3bkB25aeeawQIPyiLazm_iabQJmj';
 const DATA_DIR = path.join(__dirname, 'data');
 
@@ -95,15 +96,40 @@ function structureData(raw) {
   return result;
 }
 
+async function clearSheet(sheets, drive, month) {
+  const title = `STORES_売上_${month}`;
+  console.log(`🧹 クリア対象シートを検索: ${title}`);
+  const ss = await findSheet(drive, title);
+  if (!ss) {
+    console.error(`❌ シートが見つかりません: ${title}`);
+    process.exit(1);
+  }
+  const ssInfo = await sheets.spreadsheets.get({ spreadsheetId: ss.id });
+  const tabs = ssInfo.data.sheets.map(s => s.properties.title);
+  for (const tab of tabs) {
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId: ss.id,
+      range: `'${tab}'!A:Z`,
+    });
+    console.log(`  ✅ クリア: ${tab}`);
+  }
+  console.log(`\n💾 クリア完了: ${title}（${tabs.length}タブ・構造は保持）`);
+}
+
 async function main() {
+  const auth = getAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+  const drive = google.drive({ version: 'v3', auth });
+
+  if (CLEAR) {
+    await clearSheet(sheets, drive, CLEAR);
+    return;
+  }
+
   if (!SOURCE || !TARGET) {
     console.error('❌ --source と --target は必須です（例: --source=202606 --target=202605）');
     process.exit(1);
   }
-
-  const auth = getAuth();
-  const sheets = google.sheets({ version: 'v4', auth });
-  const drive = google.drive({ version: 'v3', auth });
 
   const srcTitle = `STORES_売上_${SOURCE}`;
   console.log(`📄 ソースシートを検索: ${srcTitle}`);
