@@ -25,6 +25,14 @@ on:
         description: '指定月を再取得して該当月シートを上書き（前月の月末締め用 例:202605）。Slack投稿はしない'
         required: false
         default: ''
+      recover_target_month:
+        description: '事故復旧：このYYYYMMシートを復元（例:202605）。STORES再取得なし。recover_source_monthとセット'
+        required: false
+        default: ''
+      recover_source_month:
+        description: '事故復旧：データの実体があるソース月YYYYMM（例:202606）'
+        required: false
+        default: ''
 
 jobs:
   fetch-and-upload:
@@ -45,7 +53,7 @@ jobs:
         run: npm ci
 
       - name: Install Playwright Chromium
-        if: ${{ github.event.inputs.create_only != 'true' }}
+        if: ${{ github.event.inputs.create_only != 'true' && github.event.inputs.recover_target_month == '' }}
         run: npx playwright install --with-deps chromium
 
       - name: Create empty spreadsheet only
@@ -61,7 +69,7 @@ jobs:
           node upload-gsheet.js --create-only $MONTH_ARG
 
       - name: Fetch STORES data and upload to Google Sheets
-        if: ${{ github.event.inputs.create_only != 'true' && github.event.inputs.backfill_month == '' }}
+        if: ${{ github.event.inputs.create_only != 'true' && github.event.inputs.backfill_month == '' && github.event.inputs.recover_target_month == '' }}
         env:
           STORES_EMAIL: ${{ secrets.STORES_EMAIL }}
           STORES_PASSWORD: ${{ secrets.STORES_PASSWORD }}
@@ -84,6 +92,18 @@ jobs:
           M="${{ github.event.inputs.backfill_month }}"
           node fetch-stores-data.js --month=$M --date=last_month
           node upload-gsheet.js --month=$M
+
+      # 事故復旧：ソース月シートのデータを読み取り、対象月シートを復元する。STORES再取得なし・Slack投稿なし。
+      - name: Recover target month from source sheet
+        if: ${{ github.event.inputs.recover_target_month != '' }}
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+        run: |
+          SRC="${{ github.event.inputs.recover_source_month }}"
+          TGT="${{ github.event.inputs.recover_target_month }}"
+          node recover-from-sheet.js --source=$SRC --target=$TGT
+          node upload-gsheet.js --month=$TGT
 
       - name: Upload screenshots as artifact (debug)
         if: always()
