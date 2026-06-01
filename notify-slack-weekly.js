@@ -95,6 +95,7 @@ async function aggregateWeeklyData(sheets, drive, weekDays) {
 
   // 店舗別の集計結果
   const storeData = {}; // { storeName: { netSales, transactions } }
+  const monthFiles = {}; // { monthStr: { id, name } } リンク生成用
   let header = null;
 
   for (const [monthStr, dayNumbers] of Object.entries(monthGroups)) {
@@ -103,6 +104,7 @@ async function aggregateWeeklyData(sheets, drive, weekDays) {
       console.error(`⚠️ Spreadsheet not found: STORES_売上_${monthStr}`);
       continue;
     }
+    monthFiles[monthStr] = file;
     console.log(`📂 読み込み: ${file.name} (${file.id})`);
 
     // 純売上シートを読み取り
@@ -141,7 +143,7 @@ async function aggregateWeeklyData(sheets, drive, weekDays) {
     }
   }
 
-  return { storeData, header };
+  return { storeData, header, monthFiles };
 }
 
 // ── 金額フォーマット ──
@@ -164,12 +166,14 @@ function getDayOfWeek(date) {
 }
 
 // ── Slackメッセージを組み立て ──
-function buildWeeklyMessage(monday, sunday, storeData) {
+function buildWeeklyMessage(monday, sunday, storeData, monthFiles = {}) {
   const monYear = monday.getFullYear();
   const monLabel = `${monday.getMonth() + 1}月${monday.getDate()}日${getDayOfWeek(monday)}`;
   const sunLabel = `${sunday.getMonth() + 1}月${sunday.getDate()}日${getDayOfWeek(sunday)}`;
 
-  let message = `:bar_chart: _${monYear}年${monLabel}〜${sunLabel} 週次売上レポート_\n\n`;
+  const prefix = (process.env.WEEKLY_PREFIX || '').trim();
+  let message = prefix ? `${prefix}\n\n` : '';
+  message += `:bar_chart: _${monYear}年${monLabel}〜${sunLabel} 週次売上レポート_\n\n`;
 
   // 全店舗合計
   let totalSales = 0;
@@ -209,11 +213,15 @@ function buildWeeklyMessage(monday, sunday, storeData) {
     message += `\n_※ ${zeroStores.join('、')} は売上なし_\n`;
   }
 
-  // Google Spreadsheet URL
-  const urlPath = path.join(__dirname, 'spreadsheet_url.txt');
-  if (fs.existsSync(urlPath)) {
-    const url = fs.readFileSync(urlPath, 'utf-8').trim();
-    message += `\n:link: <${url}|Google Spreadsheet>`;
+  // Google Spreadsheet URL（集計対象月のシートを指す。月またぎ週は両方並べる）
+  const months = Object.keys(monthFiles).sort();
+  if (months.length > 0) {
+    const links = months.map(m => {
+      const url = `https://docs.google.com/spreadsheets/d/${monthFiles[m].id}/edit`;
+      const label = months.length > 1 ? `${m.slice(0, 4)}/${m.slice(4)}シート` : 'Google Spreadsheet';
+      return `<${url}|${label}>`;
+    });
+    message += `\n:link: ${links.join('　')}`;
   }
 
   return message;
@@ -230,7 +238,7 @@ async function main() {
   const sheets = google.sheets({ version: 'v4', auth });
   const drive = google.drive({ version: 'v3', auth });
 
-  const { storeData, header } = await aggregateWeeklyData(sheets, drive, days);
+  const { storeData, monthFiles } = await aggregateWeeklyData(sheets, drive, days);
 
   const storeCount = Object.keys(storeData).length;
   if (storeCount === 0) {
@@ -239,7 +247,7 @@ async function main() {
   }
   console.log(`✅ ${storeCount} 店舗のデータを集計`);
 
-  const message = buildWeeklyMessage(monday, sunday, storeData);
+  const message = buildWeeklyMessage(monday, sunday, storeData, monthFiles);
 
   console.log('\n── 週次Slackメッセージプレビュー ──');
   console.log(message);
