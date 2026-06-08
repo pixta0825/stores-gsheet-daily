@@ -342,9 +342,6 @@ const SUMMARY_SHEETS = [
 
 // ── サマリーシート作成（店舗横並び + グラフ）──
 async function createSummarySheets(sheets, spreadsheetId, allData, monthStr, colWidth) {
-  // 個別店舗のみ（全店舗を除外）
-  const individualStores = STORES.filter(s => s.slug !== 'all' && allData.stores[s.slug]);
-
   const allStoreData = allData.stores['all'];
   if (!allStoreData || !allStoreData.raw) return;
 
@@ -353,19 +350,63 @@ async function createSummarySheets(sheets, spreadsheetId, allData, monthStr, col
   const mon = parseInt(monthStr.substring(4, 6), 10);
   const daysInMonth = new Date(year, mon, 0).getDate();
 
-  // 店舗ごとの日別データを day番号 でルックアップ
+  // 文字列("16,700")も数値も受ける数値化（シート復旧分はカンマ付き文字列）
+  const toNum = (v) => {
+    if (typeof v === 'number') return v;
+    const n = parseFloat(String(v).replace(/[,，¥円\s]/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  // 当回シートに存在する個別タブ一覧（未取得店舗の復旧読取の可否判定用）
+  const ssTabsInfo = await sheets.spreadsheets.get({ spreadsheetId });
+  const existingTabTitles = new Set(ssTabsInfo.data.sheets.map(s => s.properties.title));
+
+  // ── 個別店舗を「当回スクレイプ or 既存タブからの復旧」で確定する ──
+  // ★恒久対策: 1店舗でも取得失敗すると、その店舗の列がサマリー(純売上/客数/単価)から
+  //   丸ごと消え、日次合計まで過少になる事故を防ぐ。当回未取得の店舗は、シートに残る
+  //   既存の個別タブ（前回までの実績）から日別データを復旧して列を維持する。
+  //   （2026-06: YY名古屋 6/1-6/7 売上欠落の根本対応）
+  const masterStores = STORES.filter(s => s.slug !== 'all');
+  const individualStores = [];
   const storeDataByDay = {};
-  for (const store of individualStores) {
+  const recoveredStores = [];
+
+  for (const store of masterStores) {
     const sd = allData.stores[store.slug];
-    storeDataByDay[store.slug] = {};
-    if (sd && sd.raw) {
-      for (const r of sd.raw) {
-        const dayMatch = String(r[0]).match(/(\d+)日/);
-        if (dayMatch && !String(r[0]).includes('期間合計')) {
-          storeDataByDay[store.slug][parseInt(dayMatch[1], 10)] = r;
-        }
+    let rows = null;
+
+    if (sd && sd.raw && sd.raw.length) {
+      rows = sd.raw;                                   // 当回スクレイプ成功
+    } else if (existingTabTitles.has(store.name)) {
+      // 当回未取得 → 既存の個別タブから日別実績を復旧
+      try {
+        const res = await sheets.spreadsheets.values.get({
+          spreadsheetId,
+          range: `'${store.name}'!A1:K40`,
+        });
+        const vals = res.data.values || [];
+        const hasData = vals.some(r => /(\d+)日/.test(String(r[0])) && !String(r[0]).includes('期間合計'));
+        if (hasData) { rows = vals; recoveredStores.push(store.name); }
+      } catch (e) {
+        console.warn(`  ⚠️ ${store.name} の既存タブ読取に失敗（列スキップ）: ${e.message}`);
       }
     }
+
+    if (!rows) continue;                               // データ皆無 → 列を作らない（従来動作）
+
+    individualStores.push(store);
+    storeDataByDay[store.slug] = {};
+    for (const r of rows) {
+      const dayMatch = String(r[0]).match(/(\d+)日/);
+      if (dayMatch && !String(r[0]).includes('期間合計')) {
+        // 先頭の日付ラベルは保持し、値列のみ数値化（復旧分のカンマ文字列対策）
+        storeDataByDay[store.slug][parseInt(dayMatch[1], 10)] = r.map((c, i) => (i === 0 ? c : toNum(c)));
+      }
+    }
+  }
+
+  if (recoveredStores.length) {
+    console.log(`  ♻️ 当回未取得のため既存タブから復旧した店舗: ${recoveredStores.join(', ')}`);
   }
   // 全店舗データのルックアップ（単価の平均用）
   const allStoreByDay = {};
@@ -762,4 +803,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { main };
+module.exports = { main, createSummarySheets };

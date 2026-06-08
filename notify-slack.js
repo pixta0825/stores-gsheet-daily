@@ -51,6 +51,27 @@ function loadCurrentMonthData() {
   return JSON.parse(fs.readFileSync(path.join(DATA_DIR, latestFile), 'utf-8'));
 }
 
+// ── マスタ店舗一覧（master.json優先、config.jsフォールバック）──
+// 当回スクレイプで丸ごと欠落した店舗（取得失敗）を検知するための基準リスト。
+function loadMasterStores() {
+  try {
+    const m = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'stores_master.json'), 'utf-8'));
+    if (Array.isArray(m.stores) && m.stores.length >= 2) {
+      return m.stores.map(s => ({ name: s.name, slug: s.slug }));
+    }
+  } catch (e) { /* フォールバックへ */ }
+  const { STORES } = require('./config');
+  return STORES.map(s => ({ name: s.name, slug: s.slug }));
+}
+
+// 当回データに丸ごと存在しない（=取得失敗の疑い）店舗名を返す。'all'は除外。
+function detectMissingStores(allData) {
+  const present = new Set(Object.keys(allData.stores || {}));
+  return loadMasterStores()
+    .filter(s => s.slug !== 'all' && !present.has(s.slug))
+    .map(s => s.name);
+}
+
 // ── 前日の売上データを抽出 ──
 function extractDailyData(allData, targetLabel) {
   const results = {};
@@ -128,6 +149,11 @@ function buildSlackMessage(targetLabel, dailyData, allData, options = {}) {
   let message = '';
   if (options.fallbackNoticeFor) {
     message += `:warning: _${options.fallbackNoticeFor} のデータがSTORES側にまだ反映されていないため、直近の ${targetLabel} の売上を掲載します_\n\n`;
+  }
+  // 当回スクレイプで丸ごと欠落した店舗（取得失敗の疑い）を明示警告。
+  // ※シート側は既存タブから復旧されるが、当日分は未反映の可能性があるため要確認。
+  if (options.missingStores && options.missingStores.length > 0) {
+    message += `:rotating_light: _STORES取得失敗の疑い: ${options.missingStores.join('、')}（当日分が未反映の可能性。シートは前回値で復旧表示）_\n\n`;
   }
   message += `:bar_chart: _${year}年${targetLabel}${dayOfWeek} 売上レポート_\n\n`;
 
@@ -225,7 +251,12 @@ function main() {
   const storeCount = Object.keys(dailyData).length;
   console.log(`✅ ${storeCount} 店舗のデータを検出（対象日=${effectiveLabel}）`);
 
-  const message = buildSlackMessage(effectiveLabel, dailyData, allData, { fallbackNoticeFor });
+  const missingStores = detectMissingStores(allData);
+  if (missingStores.length > 0) {
+    console.log(`🚨 当回データに欠落した店舗（取得失敗の疑い）: ${missingStores.join('、')}`);
+  }
+
+  const message = buildSlackMessage(effectiveLabel, dailyData, allData, { fallbackNoticeFor, missingStores });
 
   console.log('\n── Slackメッセージプレビュー ──');
   console.log(message);
@@ -237,4 +268,8 @@ function main() {
   console.log(`💾 メッセージ保存: ${outputPath}`);
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = { buildSlackMessage, detectMissingStores, loadMasterStores };
