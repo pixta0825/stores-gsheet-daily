@@ -12,6 +12,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
+const { withRetry } = require('./gapi-retry');
 
 const { STORES: STORES_FALLBACK, COLUMNS } = require('./config');
 
@@ -87,11 +88,11 @@ function getAuth() {
 // ── フォルダのアクセス確認 ──
 async function verifyFolderAccess(drive) {
   try {
-    const res = await drive.files.get({
+    const res = await withRetry('drive.files.get(フォルダアクセス確認)', () => drive.files.get({
       fileId: FOLDER_ID,
       fields: 'id, name',
       supportsAllDrives: true,
-    });
+    }));
     console.log(`📁 フォルダ確認OK: ${res.data.name} (${res.data.id})`);
     return true;
   } catch (err) {
@@ -105,13 +106,13 @@ async function verifyFolderAccess(drive) {
 
 // ── フォルダ内の既存スプレッドシートを検索 ──
 async function findExistingSpreadsheet(drive, title) {
-  const res = await drive.files.list({
+  const res = await withRetry('drive.files.list(既存スプレッドシート検索)', () => drive.files.list({
     q: `name='${title}' and '${FOLDER_ID}' in parents and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`,
     fields: 'files(id, name)',
     spaces: 'drive',
     supportsAllDrives: true,
     includeItemsFromAllDrives: true,
-  });
+  }));
   return res.data.files && res.data.files.length > 0 ? res.data.files[0] : null;
 }
 
@@ -120,7 +121,7 @@ async function createSpreadsheet(sheets, drive, title, storeNames) {
   console.log(`📝 スプレッドシート新規作成: ${title}`);
 
   // Drive API でフォルダ内に直接作成
-  const fileRes = await drive.files.create({
+  const fileRes = await withRetry('drive.files.create(スプレッドシート新規作成)', () => drive.files.create({
     resource: {
       name: title,
       mimeType: 'application/vnd.google-apps.spreadsheet',
@@ -128,7 +129,7 @@ async function createSpreadsheet(sheets, drive, title, storeNames) {
     },
     fields: 'id',
     supportsAllDrives: true,
-  });
+  }));
   const spreadsheetId = fileRes.data.id;
   console.log(`  ✅ ファイル作成完了: ${spreadsheetId}`);
 
@@ -148,21 +149,21 @@ async function createSpreadsheet(sheets, drive, title, storeNames) {
     });
   }
 
-  await sheets.spreadsheets.batchUpdate({
+  await withRetry('spreadsheets.batchUpdate(店舗シート追加)', () => sheets.spreadsheets.batchUpdate({
     spreadsheetId,
     resource: { requests },
-  });
+  }));
 
   // デフォルトのSheet1を削除
-  const ssInfo = await sheets.spreadsheets.get({ spreadsheetId });
+  const ssInfo = await withRetry('spreadsheets.get(Sheet1確認)', () => sheets.spreadsheets.get({ spreadsheetId }));
   const defaultSheet = ssInfo.data.sheets.find(s => s.properties.title === 'Sheet1');
   if (defaultSheet) {
-    await sheets.spreadsheets.batchUpdate({
+    await withRetry('spreadsheets.batchUpdate(Sheet1削除)', () => sheets.spreadsheets.batchUpdate({
       spreadsheetId,
       resource: {
         requests: [{ deleteSheet: { sheetId: defaultSheet.properties.sheetId } }],
       },
-    });
+    }));
   }
 
   console.log(`  ✅ シート構成完了 (${storeNames.length}シート)`);
@@ -188,17 +189,17 @@ async function writeSheetData(sheets, spreadsheetId, sheetTitle, rawData) {
   // シート全体をクリアしてから書き込み
   const range = `'${sheetTitle}'!A1`;
 
-  await sheets.spreadsheets.values.clear({
+  await withRetry('spreadsheets.values.clear(店舗シートクリア)', () => sheets.spreadsheets.values.clear({
     spreadsheetId,
     range: `'${sheetTitle}'!A:K`,
-  });
+  }));
 
-  await sheets.spreadsheets.values.update({
+  await withRetry('spreadsheets.values.update(店舗シート書込)', () => sheets.spreadsheets.values.update({
     spreadsheetId,
     range,
     valueInputOption: 'RAW',
     resource: { values: rows },
-  });
+  }));
 
   console.log(`  ✅ ${sheetTitle}: ${rows.length - 1}行書き込み`);
 }
@@ -290,21 +291,21 @@ async function formatSheet(sheets, spreadsheetId, sheetId, sheetTitle, dataRowCo
     },
   ];
 
-  await sheets.spreadsheets.batchUpdate({
+  await withRetry('spreadsheets.batchUpdate(書式設定)', () => sheets.spreadsheets.batchUpdate({
     spreadsheetId,
     resource: { requests },
-  });
+  }));
 
   // 自動調整後、A列の幅を取得して全列をA列幅に統一
-  const ssDetail = await sheets.spreadsheets.get({
+  const ssDetail = await withRetry('spreadsheets.get(列幅取得)', () => sheets.spreadsheets.get({
     spreadsheetId,
     fields: 'sheets(properties.sheetId,data.columnMetadata.pixelSize)',
     ranges: [`'${sheetTitle}'`],
-  });
+  }));
   const targetSheet = ssDetail.data.sheets.find(s => s.properties.sheetId === sheetId);
   if (targetSheet && targetSheet.data && targetSheet.data[0] && targetSheet.data[0].columnMetadata) {
     const colAWidth = targetSheet.data[0].columnMetadata[0].pixelSize;
-    await sheets.spreadsheets.batchUpdate({
+    await withRetry('spreadsheets.batchUpdate(列幅統一)', () => sheets.spreadsheets.batchUpdate({
       spreadsheetId,
       resource: {
         requests: [{
@@ -315,7 +316,7 @@ async function formatSheet(sheets, spreadsheetId, sheetId, sheetTitle, dataRowCo
           },
         }],
       },
-    });
+    }));
   }
 }
 
@@ -358,7 +359,7 @@ async function createSummarySheets(sheets, spreadsheetId, allData, monthStr, col
   };
 
   // 当回シートに存在する個別タブ一覧（未取得店舗の復旧読取の可否判定用）
-  const ssTabsInfo = await sheets.spreadsheets.get({ spreadsheetId });
+  const ssTabsInfo = await withRetry('spreadsheets.get(復旧用タブ一覧)', () => sheets.spreadsheets.get({ spreadsheetId }));
   const existingTabTitles = new Set(ssTabsInfo.data.sheets.map(s => s.properties.title));
 
   // ── 個別店舗を「当回スクレイプ or 既存タブからの復旧」で確定する ──
@@ -380,10 +381,10 @@ async function createSummarySheets(sheets, spreadsheetId, allData, monthStr, col
     } else if (existingTabTitles.has(store.name)) {
       // 当回未取得 → 既存の個別タブから日別実績を復旧
       try {
-        const res = await sheets.spreadsheets.values.get({
+        const res = await withRetry('spreadsheets.values.get(復旧元タブ読込)', () => sheets.spreadsheets.values.get({
           spreadsheetId,
           range: `'${store.name}'!A1:K40`,
-        });
+        }));
         const vals = res.data.values || [];
         const hasData = vals.some(r => /(\d+)日/.test(String(r[0])) && !String(r[0]).includes('期間合計'));
         if (hasData) { rows = vals; recoveredStores.push(store.name); }
@@ -423,18 +424,18 @@ async function createSummarySheets(sheets, spreadsheetId, allData, monthStr, col
     const sheetTitle = summary.title;
 
     // 現在のシート情報を取得
-    let ssInfo = await sheets.spreadsheets.get({ spreadsheetId });
+    let ssInfo = await withRetry('spreadsheets.get(サマリーシート確認)', () => sheets.spreadsheets.get({ spreadsheetId }));
     const existingTitles = ssInfo.data.sheets.map(s => s.properties.title);
 
     // シートが無ければ作成
     if (!existingTitles.includes(sheetTitle)) {
-      await sheets.spreadsheets.batchUpdate({
+      await withRetry('spreadsheets.batchUpdate(サマリーシート追加)', () => sheets.spreadsheets.batchUpdate({
         spreadsheetId,
         resource: {
           requests: [{ addSheet: { properties: { title: sheetTitle } } }],
         },
-      });
-      ssInfo = await sheets.spreadsheets.get({ spreadsheetId });
+      }));
+      ssInfo = await withRetry('spreadsheets.get(サマリーシート追加後確認)', () => sheets.spreadsheets.get({ spreadsheetId }));
     }
 
     const sheetObj = ssInfo.data.sheets.find(s => s.properties.title === sheetTitle);
@@ -466,16 +467,16 @@ async function createSummarySheets(sheets, spreadsheetId, allData, monthStr, col
     }
 
     // シートクリア＆書き込み
-    await sheets.spreadsheets.values.clear({
+    await withRetry('spreadsheets.values.clear(サマリーシートクリア)', () => sheets.spreadsheets.values.clear({
       spreadsheetId,
       range: `'${sheetTitle}'!A:Z`,
-    });
-    await sheets.spreadsheets.values.update({
+    }));
+    await withRetry('spreadsheets.values.update(サマリーシート書込)', () => sheets.spreadsheets.values.update({
       spreadsheetId,
       range: `'${sheetTitle}'!A1`,
       valueInputOption: 'RAW',
       resource: { values: rows },
-    });
+    }));
 
     const numCols = header.length;
     const numDataRows = rows.length - 1;
@@ -491,10 +492,10 @@ async function createSummarySheets(sheets, spreadsheetId, allData, monthStr, col
       deleteRequests.push({ clearBasicFilter: { sheetId } });
     }
     if (deleteRequests.length > 0) {
-      await sheets.spreadsheets.batchUpdate({
+      await withRetry('spreadsheets.batchUpdate(既存グラフ/フィルタ削除)', () => sheets.spreadsheets.batchUpdate({
         spreadsheetId,
         resource: { requests: deleteRequests },
-      });
+      }));
     }
 
     // 数値フォーマットパターン（ゼロを "-" 表示）
@@ -603,13 +604,13 @@ async function createSummarySheets(sheets, spreadsheetId, allData, monthStr, col
       },
     });
 
-    await sheets.spreadsheets.batchUpdate({
+    await withRetry('spreadsheets.batchUpdate(サマリー書式/グラフ設定)', () => sheets.spreadsheets.batchUpdate({
       spreadsheetId,
       resource: { requests: formatRequests },
-    });
+    }));
 
     // 店舗シートと同じ列幅に統一
-    await sheets.spreadsheets.batchUpdate({
+    await withRetry('spreadsheets.batchUpdate(サマリー列幅統一)', () => sheets.spreadsheets.batchUpdate({
       spreadsheetId,
       resource: {
         requests: [{
@@ -620,7 +621,7 @@ async function createSummarySheets(sheets, spreadsheetId, allData, monthStr, col
           },
         }],
       },
-    });
+    }));
 
     console.log(`  📊 ${sheetTitle}: ${numDataRows}行 + グラフ作成`);
   }
@@ -632,10 +633,10 @@ async function createSummarySheets(sheets, spreadsheetId, allData, monthStr, col
       fields: 'index',
     },
   }));
-  await sheets.spreadsheets.batchUpdate({
+  await withRetry('spreadsheets.batchUpdate(サマリーシートを先頭に移動)', () => sheets.spreadsheets.batchUpdate({
     spreadsheetId,
     resource: { requests: reorderRequests },
-  });
+  }));
   console.log('  ✅ サマリーシートを先頭に移動');
 }
 
@@ -717,17 +718,17 @@ async function main() {
     spreadsheetId = existing.id;
 
     // 既存シートの確認と不足分の追加
-    const ssInfo = await sheets.spreadsheets.get({ spreadsheetId });
+    const ssInfo = await withRetry('spreadsheets.get(既存シート一覧確認)', () => sheets.spreadsheets.get({ spreadsheetId }));
     const existingSheetTitles = ssInfo.data.sheets.map(s => s.properties.title);
 
     for (const name of storeNames) {
       if (!existingSheetTitles.includes(name)) {
-        await sheets.spreadsheets.batchUpdate({
+        await withRetry('spreadsheets.batchUpdate(不足シート追加)', () => sheets.spreadsheets.batchUpdate({
           spreadsheetId,
           resource: {
             requests: [{ addSheet: { properties: { title: name } } }],
           },
-        });
+        }));
         console.log(`  📋 シート追加: ${name}`);
       }
     }
@@ -736,7 +737,7 @@ async function main() {
   }
 
   // 各店舗のデータを書き込み
-  const ssInfo = await sheets.spreadsheets.get({ spreadsheetId });
+  const ssInfo = await withRetry('spreadsheets.get(書込前シートマップ取得)', () => sheets.spreadsheets.get({ spreadsheetId }));
   const sheetMap = {};
   for (const s of ssInfo.data.sheets) {
     sheetMap[s.properties.title] = s.properties.sheetId;
@@ -759,11 +760,11 @@ async function main() {
   const firstStoreName = STORES.find(s => allData.stores[s.slug])?.name;
   let storeColWidth = 100;
   if (firstStoreName && sheetMap[firstStoreName] !== undefined) {
-    const ssDetailW = await sheets.spreadsheets.get({
+    const ssDetailW = await withRetry('spreadsheets.get(店舗シート列幅取得)', () => sheets.spreadsheets.get({
       spreadsheetId,
       fields: 'sheets(properties.sheetId,data.columnMetadata.pixelSize)',
       ranges: [`'${firstStoreName}'`],
-    });
+    }));
     const ws = ssDetailW.data.sheets.find(s => s.properties.sheetId === sheetMap[firstStoreName]);
     if (ws?.data?.[0]?.columnMetadata?.[0]) {
       storeColWidth = ws.data[0].columnMetadata[0].pixelSize;

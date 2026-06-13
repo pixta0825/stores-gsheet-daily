@@ -9,6 +9,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
+const { withRetry } = require('./gapi-retry');
 
 const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || '1ZiZE3bkB25aeeawQIPyiLazm_iabQJmj';
 
@@ -65,21 +66,21 @@ function getLastWeekRange() {
 // ── DriveフォルダからSpreadsheetを検索 ──
 async function findSpreadsheet(drive, monthStr) {
   const title = `STORES_売上_${monthStr}`;
-  const res = await drive.files.list({
+  const res = await withRetry('drive.files.list(週次スプシ検索)', () => drive.files.list({
     q: `name='${title}' and '${FOLDER_ID}' in parents and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`,
     fields: 'files(id,name)',
     supportsAllDrives: true,
     includeItemsFromAllDrives: true,
-  });
+  }));
   return res.data.files?.[0] || null;
 }
 
 // ── サマリーシートからデータ読み取り ──
 async function readSheetData(sheets, spreadsheetId, sheetTitle) {
-  const res = await sheets.spreadsheets.values.get({
+  const res = await withRetry('spreadsheets.values.get(売上データ読込)', () => sheets.spreadsheets.values.get({
     spreadsheetId,
     range: `'${sheetTitle}'!A:Z`,
-  });
+  }));
   return res.data.values || [];
 }
 

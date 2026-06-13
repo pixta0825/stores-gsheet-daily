@@ -13,6 +13,7 @@
 // ────────────────────────────────────────────────────────────
 
 const { google } = require('googleapis');
+const { withRetry } = require('./gapi-retry');
 const fs = require('fs');
 const path = require('path');
 
@@ -54,13 +55,13 @@ function getAuth() {
 }
 
 async function findSheet(drive, title) {
-  const res = await drive.files.list({
+  const res = await withRetry('drive.files.list(シート検索)', () => drive.files.list({
     q: `name='${title}' and '${FOLDER_ID}' in parents and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`,
     fields: 'files(id, name)',
     spaces: 'drive',
     supportsAllDrives: true,
     includeItemsFromAllDrives: true,
-  });
+  }));
   return res.data.files && res.data.files[0] ? res.data.files[0] : null;
 }
 
@@ -104,13 +105,13 @@ async function clearSheet(sheets, drive, month) {
     console.error(`❌ シートが見つかりません: ${title}`);
     process.exit(1);
   }
-  const ssInfo = await sheets.spreadsheets.get({ spreadsheetId: ss.id });
+  const ssInfo = await withRetry('spreadsheets.get(クリア対象タブ一覧)', () => sheets.spreadsheets.get({ spreadsheetId: ss.id }));
   const tabs = ssInfo.data.sheets.map(s => s.properties.title);
   for (const tab of tabs) {
-    await sheets.spreadsheets.values.clear({
+    await withRetry('spreadsheets.values.clear(タブクリア)', () => sheets.spreadsheets.values.clear({
       spreadsheetId: ss.id,
       range: `'${tab}'!A:Z`,
-    });
+    }));
     console.log(`  ✅ クリア: ${tab}`);
   }
   console.log(`\n💾 クリア完了: ${title}（${tabs.length}タブ・構造は保持）`);
@@ -140,7 +141,7 @@ async function main() {
   }
   console.log(`  ✅ 発見: ${src.name} (${src.id})`);
 
-  const ssInfo = await sheets.spreadsheets.get({ spreadsheetId: src.id });
+  const ssInfo = await withRetry('spreadsheets.get(ソースタブ一覧)', () => sheets.spreadsheets.get({ spreadsheetId: src.id }));
   const tabTitles = ssInfo.data.sheets.map(s => s.properties.title);
 
   const stores = {};
@@ -149,10 +150,10 @@ async function main() {
       console.log(`  ⏭ タブなし: ${store.name}`);
       continue;
     }
-    const r = await sheets.spreadsheets.values.get({
+    const r = await withRetry('spreadsheets.values.get(店舗タブ読み取り)', () => sheets.spreadsheets.values.get({
       spreadsheetId: src.id,
       range: `'${store.name}'!A1:K100`,
-    });
+    }));
     const vals = r.data.values || [];
     if (vals.length < 2) {
       console.log(`  ⚠️ データなし: ${store.name}`);
