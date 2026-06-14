@@ -7,6 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { verifyGate, buildWarningBanner } = require('./verify-gate');
 
 const DATA_DIR = path.join(__dirname, 'data');
 
@@ -114,6 +115,37 @@ function findLatestAvailableLabel(allData) {
     }
   }
 
+  return best ? best.label : null;
+}
+
+// ── 指定ラベルの個別店舗合計を算出（'all'除外）──
+function computeTotalForLabel(allData, label) {
+  const d = extractDailyData(allData, label);
+  const individual = Object.entries(d).filter(([slug]) => slug !== 'all');
+  return {
+    netSales: individual.reduce((s, [, x]) => s + (x.netSales || 0), 0),
+    transactions: individual.reduce((s, [, x]) => s + (x.transactions || 0), 0),
+    storeCount: individual.length,
+  };
+}
+
+// ── 対象日より前で売上のある最新ラベルを返す（前日比の基準）──
+function findPreviousLabelWithData(allData, currentLabel) {
+  const cur = parseMonthDay(currentLabel);
+  if (!cur) return null;
+  let best = null;
+  for (const store of Object.values(allData.stores)) {
+    for (const rec of (store.data?.daily || [])) {
+      if (!rec || (rec.netSales || 0) <= 0) continue;
+      const md = parseMonthDay(rec.label);
+      if (!md) continue;
+      const isBefore = md.month < cur.month || (md.month === cur.month && md.day < cur.day);
+      if (!isBefore) continue;
+      if (!best || md.month > best.month || (md.month === best.month && md.day > best.day)) {
+        best = { ...md, label: `${md.month}月${md.day}日` };
+      }
+    }
+  }
   return best ? best.label : null;
 }
 
@@ -262,9 +294,58 @@ function main() {
   console.log(message);
   console.log('── プレビュー終了 ──\n');
 
+  // ── 証拠ゲート（Loop Engineering）: 投稿前に当日数値を前日比などで検証 ──
+  // fail-open: 検証ロジックで例外が出ても配信は止めない（ゲートは補助）
+  let finalMessage = message;
+  try {
+    const curTotal = computeTotalForLabel(allData, effectiveLabel);
+    const prevLabel = findPreviousLabelWithData(allData, effectiveLabel);
+    const prevTotal = prevLabel ? computeTotalForLabel(allData, prevLabel) : null;
+    const masterCount = loadMasterStores().filter(s => s.slug !== 'all').length;
+
+    const gate = verifyGate({
+      label: 'STORES日次',
+      metrics: { netSales: curTotal.netSales, transactions: curTotal.transactions, storeCount: curTotal.storeCount },
+      prev: prevTotal ? { netSales: prevTotal.netSales, transactions: prevTotal.transactions } : null,
+      expect: {
+        counts: {
+          netSales: { min: 1, name: '純売上合計' },
+          storeCount: { min: Math.ceil(masterCount * 0.5), name: '取得店舗数' },
+        },
+        anomaly: {
+          keys: {
+            netSales: { name: '純売上合計', threshold: 0.5 },
+            transactions: { name: '件数合計', threshold: 0.5 },
+          },
+          defaultThreshold: 0.5,
+        },
+      },
+    });
+    const warnings = [...gate.warnings];
+    if (prevLabel) {
+      console.log(`[Gate] 前日比基準: ${prevLabel}（純売上 ¥${prevTotal.netSales.toLocaleString()} → ${effectiveLabel} ¥${curTotal.netSales.toLocaleString()}）`);
+    } else {
+      console.log('[Gate] 前日データなし → 前日比はスキップ（sanityのみ）');
+    }
+    // 全店舗合計の不一致（従来はログのみ）を⚠️に昇格
+    const scrapedAll = extractDailyData(allData, effectiveLabel)['all'];
+    if (scrapedAll && scrapedAll.netSales !== curTotal.netSales) {
+      warnings.push(`全店舗合計の不一致（スクレイプ値¥${scrapedAll.netSales.toLocaleString()} ≠ 個別合計¥${curTotal.netSales.toLocaleString()}）`);
+    }
+
+    if (warnings.length) {
+      finalMessage = buildWarningBanner(warnings, 'STORES日次') + message;
+      console.warn(`[Gate] ⚠️ 異常検知: ${warnings.join(' / ')}`);
+    } else {
+      console.log('[Gate] ✓ 検証通過');
+    }
+  } catch (e) {
+    console.error(`[Gate] 検証中にエラー（配信は継続）: ${e.message}`);
+  }
+
   // メッセージをファイルに保存
   const outputPath = path.join(__dirname, 'slack_message.txt');
-  fs.writeFileSync(outputPath, message, 'utf-8');
+  fs.writeFileSync(outputPath, finalMessage, 'utf-8');
   console.log(`💾 メッセージ保存: ${outputPath}`);
 }
 
@@ -272,4 +353,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { buildSlackMessage, detectMissingStores, loadMasterStores };
+module.exports = { buildSlackMessage, detectMissingStores, loadMasterStores, computeTotalForLabel, findPreviousLabelWithData };
