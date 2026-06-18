@@ -4,7 +4,9 @@
   "description": "STORES POS 売上データ → Google Spreadsheet 自動取得 + Slack通知",
   "main": "index.js",
   "scripts": {
-    "fetch": "node fetch-stores-data.js",
+    "fetch": "node fetch-stores-api.js",
+    "fetch:api": "node fetch-stores-api.js",
+    "fetch:scrape": "node fetch-stores-data.js",
     "upload": "node upload-gsheet.js",
     "notify": "node notify-slack.js",
     "post": "node post-to-slack.js",

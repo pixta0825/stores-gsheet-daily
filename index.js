@@ -7,6 +7,11 @@ const path = require('path');
 
 const DRY_RUN = process.argv.includes('--dry-run');
 
+// データ取得方式: 既定は公式API。STORES_FETCH=scrape で旧スクレイピングに切り戻せる（フォールバック）。
+const FETCH_SCRIPT = process.env.STORES_FETCH === 'scrape'
+  ? 'fetch-stores-data.js'
+  : 'fetch-stores-api.js';
+
 function log(msg) {
   const ts = new Date().toLocaleTimeString('ja-JP');
   console.log(`[${ts}] ${msg}`);
@@ -55,7 +60,7 @@ async function main() {
         const prevMonth = computePrevMonth();
         log(`📅 月初検知 → 前月(${prevMonth})の締め処理を先に実行`);
         try {
-          run('fetch-stores-data.js', `前月締め: データ取得 (${prevMonth})`, `--month=${prevMonth} --date=last_month`);
+          run(FETCH_SCRIPT, `前月締め: データ取得 (${prevMonth})`, `--month=${prevMonth} --date=last_month`);
           run('upload-gsheet.js', `前月締め: シート上書き (${prevMonth})`, `--month=${prevMonth}`);
         } catch (err) {
           log(`⚠️ 前月締め処理に失敗（当月処理は継続）: ${err.message}`);
@@ -64,7 +69,7 @@ async function main() {
     }
 
     // Step 1: STORES からデータ取得 → JSON 保存
-    run('fetch-stores-data.js', 'STORES データ取得');
+    run(FETCH_SCRIPT, `STORES データ取得 (${FETCH_SCRIPT === 'fetch-stores-api.js' ? 'API' : 'スクレイピング'})`);
 
     if (DRY_RUN) {
       log('[DRY_RUN] Google Spreadsheet アップロード・Slack投稿をスキップ');

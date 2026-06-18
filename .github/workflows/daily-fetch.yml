@@ -79,6 +79,7 @@ jobs:
       - name: Fetch STORES data and upload to Google Sheets
         if: ${{ github.event.inputs.create_only != 'true' && github.event.inputs.backfill_month == '' && github.event.inputs.recover_target_month == '' && github.event.inputs.clear_month == '' && github.event.inputs.weekly_repost != 'true' }}
         env:
+          STORES_RETAIL_TOKEN: ${{ secrets.STORES_RETAIL_TOKEN }}
           STORES_EMAIL: ${{ secrets.STORES_EMAIL }}
           STORES_PASSWORD: ${{ secrets.STORES_PASSWORD }}
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
@@ -92,13 +93,14 @@ jobs:
       - name: Backfill specific month
         if: ${{ github.event.inputs.create_only != 'true' && github.event.inputs.backfill_month != '' }}
         env:
+          STORES_RETAIL_TOKEN: ${{ secrets.STORES_RETAIL_TOKEN }}
           STORES_EMAIL: ${{ secrets.STORES_EMAIL }}
           STORES_PASSWORD: ${{ secrets.STORES_PASSWORD }}
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
         run: |
           M="${{ github.event.inputs.backfill_month }}"
-          node fetch-stores-data.js --month=$M --date=last_month
+          node fetch-stores-api.js --month=$M --date=last_month
           node upload-gsheet.js --month=$M
 
       # 事故復旧：ソース月シートのデータを読み取り、対象月シートを復元する。STORES再取得なし・Slack投稿なし。
