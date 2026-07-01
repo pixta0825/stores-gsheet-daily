@@ -27,9 +27,30 @@ function getYesterdayLabel() {
   return `${now.getMonth() + 1}月${now.getDate()}日`;
 }
 
-// ── 当月のJSONを読み込み ──
+// ── 対象日が属する YYYYMM を推定 ──
+// 月初（1日）は前日が前月に属するため、当月ではなく前月ファイルを読む必要がある。
+// この関数で「対象日の月」を求め、loadCurrentMonthData がその月のファイルを選ぶ。
+function getTargetYyyymm() {
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+  if (TARGET_DATE_LABEL) {
+    // 手動指定（--date=6月30日 等）: ラベルの月を採用。
+    // 指定月が現在月より後（例: 1月に12月を指定）なら前年扱い。
+    const md = parseMonthDay(TARGET_DATE_LABEL);
+    if (md) {
+      const curMonth = now.getMonth() + 1;
+      const year = md.month > curMonth ? now.getFullYear() - 1 : now.getFullYear();
+      return `${year}${String(md.month).padStart(2, '0')}`;
+    }
+  }
+  // 自動（前日基準）: 前日の実日付から YYYYMM を導く。月初は前月になる。
+  now.setDate(now.getDate() - 1);
+  return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// ── 対象日が属する月のJSONを読み込み ──
 // 月次データファイル（YYYYMM.json）のみを対象とする。
 // stores_master.json などの設定ファイルは除外する。
+// 月初は「前日=前月」となるため、常に最新月ではなく対象日の月ファイルを選ぶ。
 function loadCurrentMonthData() {
   if (!fs.existsSync(DATA_DIR)) {
     console.error('❌ data/ フォルダがありません');
@@ -47,9 +68,15 @@ function loadCurrentMonthData() {
     process.exit(1);
   }
 
-  const latestFile = jsonFiles[0];
-  console.log(`📂 読み込み: data/${latestFile}`);
-  return JSON.parse(fs.readFileSync(path.join(DATA_DIR, latestFile), 'utf-8'));
+  // 対象日が属する月のファイルを優先。無ければ最新月にフォールバック（従来動作）。
+  const wanted = `${getTargetYyyymm()}.json`;
+  const chosenFile = jsonFiles.includes(wanted) ? wanted : jsonFiles[0];
+  if (chosenFile !== wanted) {
+    console.log(`📂 読み込み: data/${chosenFile}（対象月 ${wanted} が無いため最新月にフォールバック）`);
+  } else {
+    console.log(`📂 読み込み: data/${chosenFile}`);
+  }
+  return JSON.parse(fs.readFileSync(path.join(DATA_DIR, chosenFile), 'utf-8'));
 }
 
 // ── マスタ店舗一覧（master.json優先、config.jsフォールバック）──
