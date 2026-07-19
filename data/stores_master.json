@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-07-05T02:56:20.731Z",
+  "generatedAt": "2026-07-19T02:34:14.277Z",
   "source": "POS分析画面プルダウン (button[data-testid=\"button\"] + role=option)",
-  "storeCount": 11,
+  "storeCount": 12,
   "stores": [
     {
       "rawName": "全店舗",
@@ -40,9 +40,9 @@
       "salesChannelId": "6940c888bd17481c37c99dea"
     },
     {
-      "rawName": "HELLO BONSAI CLUB",
-      "name": "HELLO BONSAI CLUB",
-      "slug": "hello_bonsai",
+      "rawName": "Y! Y! hands京都",
+      "name": "Y! Y! hands京都",
+      "slug": "y_y_hands",
       "salesChannelId": "6960aeb4e7c5ab0aaa10f966"
     },
     {
@@ -68,6 +68,12 @@
       "name": "YYHANDS原宿",
       "slug": "yyhands_harajuku",
       "salesChannelId": "69f43d5cfc56600a9d3552c2"
+    },
+    {
+      "rawName": "YASUMI LAB 代官山",
+      "name": "YASUMI LAB 代官山",
+      "slug": "yasumi_lab",
+      "salesChannelId": "6a4f4ad412d0390a4fe48186"
     }
   ]
 }
