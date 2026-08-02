@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-26T02:38:47.524Z",
+  "generatedAt": "2026-08-02T02:37:45.104Z",
   "source": "POS分析画面プルダウン (button[data-testid=\"button\"] + role=option)",
   "storeCount": 12,
   "stores": [
@@ -22,9 +22,9 @@
       "salesChannelId": "6940c8274683791b9ae0058a"
     },
     {
-      "rawName": "Y! Y! hands大阪",
-      "name": "YYHANDS大阪",
-      "slug": "yyhands_osaka",
+      "rawName": "YASUMI LAB OSAKA",
+      "name": "YASUMI LAB OSAKA",
+      "slug": "yasumi_lab_osaka",
       "salesChannelId": "6940c855e0c48f1a99481d83"
     },
     {
