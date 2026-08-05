@@ -45,10 +45,21 @@ async function apiGet(pathAndQuery, { maxRetries = 5 } = {}) {
   throw new Error(`STORES API リトライ上限超過: ${lastErr && lastErr.message}`);
 }
 
-// 販売チャネル一覧
-async function fetchSalesChannels() {
-  const j = await apiGet('/sales_channels');
-  return Array.isArray(j) ? j : (j.sales_channels || j.data || []);
+// 販売チャネル（＝店舗）一覧
+// ★limit を明示しないと API 既定の 10 件で打ち切られる。店舗が11件以上あると
+//   黙って一部の店舗が欠ける（2026-08-05: YY名古屋 が落ちていた）ため必ずページ送りする。
+async function fetchSalesChannels({ limit = 100, pageDelayMs = 200 } = {}) {
+  const all = [];
+  let offset = 0;
+  for (let page = 0; page < 100; page++) {
+    const j = await apiGet(`/sales_channels?limit=${limit}&offset=${offset}`);
+    const arr = Array.isArray(j) ? j : (j.sales_channels || j.data || []);
+    all.push(...arr);
+    if (arr.length < limit) break;
+    offset += limit;
+    await sleep(pageDelayMs);
+  }
+  return all;
 }
 
 // 注文をページ送りで全件取得する。

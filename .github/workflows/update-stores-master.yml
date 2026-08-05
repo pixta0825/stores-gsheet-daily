@@ -1,4 +1,12 @@
-name: Update Stores Master (weekly)
+name: Update Stores Master (weekly safety net)
+
+# 店舗マスタの通常更新は日次ジョブ（daily-fetch.yml → index.js → sync-stores-master.js）が
+# 公式APIと同期して行う。このワークフローは日次が何日も落ちていた場合の保険として
+# 同じ同期を週1回走らせるだけ。
+# ※以前はここで update-stores-master.js（POS画面のPlaywright走査）が
+#   マスタを書いていたが、画面のプルダウン表記が公式APIより遅れるため
+#   同期済みのマスタを古い名前で上書きしてしまう。書き手は公式APIに一本化した。
+#   update-stores-master.js は API が使えないときの手動フォールバックとして残置。
 
 on:
   schedule:
@@ -26,15 +34,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Run update-stores-master.js
+      - name: Sync stores master from STORES official API
         env:
-          STORES_EMAIL: ${{ secrets.STORES_EMAIL }}
-          STORES_PASSWORD: ${{ secrets.STORES_PASSWORD }}
-          HEADLESS: 'true'
-        run: node update-stores-master.js
+          STORES_RETAIL_TOKEN: ${{ secrets.STORES_RETAIL_TOKEN }}
+        run: node sync-stores-master.js
 
       - name: Commit and push if changed
         run: |
@@ -42,18 +45,10 @@ jobs:
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if [ -n "$(git status --porcelain data/stores_master.json)" ]; then
             git add data/stores_master.json
-            git commit -m "chore: update stores_master.json (weekly auto)"
+            git commit -m "chore: sync stores_master.json from STORES API (weekly safety net)"
+            git pull --rebase --autostash origin main || true
             git push
             echo "✅ stores_master.json を更新しました"
           else
             echo "ℹ️ 差分なし、コミットスキップ"
           fi
-
-      - name: Upload screenshots on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: screenshots-${{ github.run_id }}
-          path: screenshots/
-          retention-days: 7
-          if-no-files-found: ignore

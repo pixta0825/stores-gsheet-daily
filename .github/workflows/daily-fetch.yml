@@ -46,6 +46,12 @@ jobs:
   fetch-and-upload:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # 日次実行のなかで店舗マスタ（data/stores_master.json）を公式APIと同期し、
+    # 変化があればコミットして戻すため書き込み権限が必要。
+    # アイテム別売上bot は main の stores_master.json を直接 curl するので、
+    # ここで push しておかないと新店・改称が向こうに伝わらない。
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -135,6 +141,24 @@ jobs:
         run: |
           node notify-slack-weekly.js
           node post-to-slack.js
+
+      # 店舗マスタが更新されていたらコミットして戻す（新店追加・改称の伝播）。
+      # 失敗しても当日のレポート配信は済んでいるので、ここでジョブを落とさない。
+      - name: Commit stores_master.json if changed
+        if: ${{ always() && github.event.inputs.dry_run != 'true' }}
+        continue-on-error: true
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain data/stores_master.json)" ]; then
+            git add data/stores_master.json
+            git commit -m "chore: sync stores_master.json from STORES API (daily auto)"
+            git pull --rebase --autostash origin main || true
+            git push
+            echo "✅ stores_master.json を更新しました"
+          else
+            echo "ℹ️ 店舗構成に差分なし"
+          fi
 
       - name: Upload screenshots as artifact (debug)
         if: always()

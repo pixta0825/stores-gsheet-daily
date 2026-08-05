@@ -11,6 +11,20 @@ const { verifyGate, buildWarningBanner } = require('./verify-gate');
 
 const DATA_DIR = path.join(__dirname, 'data');
 
+// ── 店舗マスタの差分（新店追加・改称）を読む ──
+// sync-stores-master.js が毎日書き出す。無い/壊れている場合は黙って無視する
+// （通知の飾りであり、これで日次配信を止めない）。
+function readStoreChanges() {
+  try {
+    const p = path.join(DATA_DIR, 'stores_master_changes.json');
+    if (!fs.existsSync(p)) return null;
+    const c = JSON.parse(fs.readFileSync(p, 'utf-8'));
+    return c && c.hasChanges ? c : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 // ── CLI引数 ──
 const args = process.argv.slice(2);
 function getArg(name) {
@@ -215,6 +229,25 @@ function buildSlackMessage(targetLabel, dailyData, allData, options = {}) {
     message += `:rotating_light: _STORES取得失敗の疑い: ${options.missingStores.join('、')}（当日分が未反映の可能性。シートは前回値で復旧表示）_\n\n`;
   }
   message += `:bar_chart: _${year}年${targetLabel}${dayOfWeek} 売上レポート_\n\n`;
+
+  // 店舗構成が変わった日は必ず本文で知らせる（黙って増減・改称させない）。
+  // sync-stores-master.js が公式APIと突き合わせて書き出した差分を読む。
+  const storeChanges = readStoreChanges();
+  if (storeChanges) {
+    const notes = [];
+    if (storeChanges.added && storeChanges.added.length) {
+      notes.push(`新店を自動追加: ${storeChanges.added.join('、')}`);
+    }
+    for (const r of (storeChanges.renamed || [])) {
+      notes.push(`店舗名の変更を反映: ${r.from} → ${r.to}`);
+    }
+    if (storeChanges.absentFromApi && storeChanges.absentFromApi.length) {
+      notes.push(`STORES側に見つからない店舗: ${storeChanges.absentFromApi.join('、')}（集計は従来どおり継続）`);
+    }
+    if (notes.length) {
+      message += `:information_source: _${notes.join(' / ')}_\n\n`;
+    }
+  }
 
   // 全店舗合計: 個別店舗データから算出（スクレイピング漏れによる不一致を防止）
   const individualStores = Object.entries(dailyData)

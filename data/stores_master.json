@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-02T02:37:45.104Z",
-  "source": "POS分析画面プルダウン (button[data-testid=\"button\"] + role=option)",
+  "generatedAt": "2026-08-05T00:23:48.749Z",
+  "source": "STORES 公式 retail API /sales_channels（sync-stores-master.js）",
   "storeCount": 12,
   "stores": [
     {
@@ -46,10 +46,11 @@
       "salesChannelId": "6960aeb4e7c5ab0aaa10f966"
     },
     {
-      "rawName": "Y! Y! hands新宿",
-      "name": "YYHANDS新宿",
+      "rawName": "Coppice吉祥寺",
+      "name": "Coppice吉祥寺",
       "slug": "yyhands_shinjuku",
-      "salesChannelId": "69ae3f7326307605f0833d2f"
+      "salesChannelId": "69ae3f7326307605f0833d2f",
+      "prevName": "YYHANDS新宿"
     },
     {
       "rawName": "YASUMI LAB TOKYO",

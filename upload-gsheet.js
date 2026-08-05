@@ -321,18 +321,22 @@ async function formatSheet(sheets, spreadsheetId, sheetId, sheetTitle, dataRowCo
 }
 
 // ── サマリーシート定義 ──
-// 短縮店舗名マッピング
-const SHORT_NAMES = {
-  yyhands_nagoya: 'YY名古屋',
-  yyhands_tokyo: 'YY東京',
-  yyhands_osaka: 'YY大阪',
-  yyhands_shinjuku: 'YY新宿',
-  yyhands_shibuya: 'YY渋谷',
-  yyhands_harajuku: 'YY原宿',
-  yasumilab_nagoya: 'LAB名古屋',
-  yasumilab_tokyo: 'LAB東京',
-  '2525jewelry_nagoya': '2525',
-  hello_bonsai: 'BONSAI',
+// 短縮店舗名マッピング（サマリー「純売上/客数/単価」の列見出しに使う）
+// ★キーは slug ではなく表示名。slug は改称しても不変なので slug で引くと、
+//   店舗が改称されてもサマリー見出しだけ旧名のまま残る（タブ名と食い違い、
+//   この見出しを読む Y社週報 も旧名で集計してしまう）。表示名で引けば、
+//   改称された店舗は自動的にこの表から外れて新しい名前が見出しに出る。
+const SHORT_NAMES_BY_NAME = {
+  'YY HANDS名古屋': 'YY名古屋',
+  'YYHANDS東京': 'YY東京',
+  'YYHANDS大阪': 'YY大阪',
+  'YYHANDS新宿': 'YY新宿',
+  'YYHANDS渋谷': 'YY渋谷',
+  'YYHANDS原宿': 'YY原宿',
+  'YASUMI LAB名古屋': 'LAB名古屋',
+  'YASUMI LAB TOKYO': 'LAB東京',
+  '2525ジュエリー名古屋': '2525',
+  'HELLO BONSAI CLUB': 'BONSAI',
 };
 
 const SUMMARY_SHEETS = [
@@ -443,7 +447,7 @@ async function createSummarySheets(sheets, spreadsheetId, allData, monthStr, col
     summarySheetIds.push(sheetId);
 
     // ヘッダー行: 日付 | 店舗1(短縮) | ... | 合計/平均
-    const shortNames = individualStores.map(s => SHORT_NAMES[s.slug] || s.name);
+    const shortNames = individualStores.map(s => SHORT_NAMES_BY_NAME[s.name] || s.name);
     const header = ['日付', ...shortNames, summary.lastColLabel];
 
     // 月全日分のデータ行（数値で書き込み、0はフォーマットで"-"表示）
@@ -720,6 +724,36 @@ async function main() {
     // 既存シートの確認と不足分の追加
     const ssInfo = await withRetry('spreadsheets.get(既存シート一覧確認)', () => sheets.spreadsheets.get({ spreadsheetId }));
     const existingSheetTitles = ssInfo.data.sheets.map(s => s.properties.title);
+
+    // ── 店舗が改称されていたら既存タブを改名する ──
+    // 改名せずに新名のタブを作ると、旧名タブに残った当月分が孤児になり、
+    // 「当回未取得なら既存タブから復旧する」安全網（createSummarySheets）も
+    // 新名で探して外すため機能しなくなる。同一店舗の履歴はタブごと引き継ぐ。
+    for (const store of STORES) {
+      if (!store.prevName || store.prevName === store.name) continue;
+      const from = store.prevName;
+      const to = store.name;
+      if (!existingSheetTitles.includes(from)) continue;   // 旧名タブが無ければ何もしない
+      if (existingSheetTitles.includes(to)) {
+        console.log(`  ⚠️ 改称タブ ${from} → ${to}: 新名タブが既にあるため改名をスキップ（要確認）`);
+        continue;
+      }
+      const sheetId = ssInfo.data.sheets.find(s => s.properties.title === from).properties.sheetId;
+      await withRetry('spreadsheets.batchUpdate(店舗改称タブ改名)', () => sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        resource: {
+          requests: [{
+            updateSheetProperties: {
+              properties: { sheetId, title: to },
+              fields: 'title',
+            },
+          }],
+        },
+      }));
+      const idx = existingSheetTitles.indexOf(from);
+      existingSheetTitles[idx] = to;
+      console.log(`  ✏️  シート改名（店舗改称）: ${from} → ${to}`);
+    }
 
     for (const name of storeNames) {
       if (!existingSheetTitles.includes(name)) {
