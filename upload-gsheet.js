@@ -23,7 +23,11 @@ function loadStores() {
     if (require('fs').existsSync(masterPath)) {
       const m = JSON.parse(require('fs').readFileSync(masterPath, 'utf-8'));
       if (Array.isArray(m.stores) && m.stores.length >= 2) {
-        return m.stores.map(s => ({ name: s.name, slug: s.slug, salesChannelId: s.salesChannelId }));
+        // prevName（改称前の表示名）まで持ち回す。ここで落とすと改称時のタブ改名が
+        // 発火せず、新名の空タブが増えて旧名タブに実績が取り残される。
+        return m.stores.map(s => ({
+          name: s.name, slug: s.slug, salesChannelId: s.salesChannelId, prevName: s.prevName,
+        }));
       }
     }
   } catch (e) {
