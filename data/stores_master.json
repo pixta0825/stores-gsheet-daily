@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-05T00:23:48.749Z",
+  "generatedAt": "2026-08-05T23:10:41.709Z",
   "source": "STORES 公式 retail API /sales_channels（sync-stores-master.js）",
   "storeCount": 12,
   "stores": [
@@ -49,8 +49,7 @@
       "rawName": "Coppice吉祥寺",
       "name": "Coppice吉祥寺",
       "slug": "yyhands_shinjuku",
-      "salesChannelId": "69ae3f7326307605f0833d2f",
-      "prevName": "YYHANDS新宿"
+      "salesChannelId": "69ae3f7326307605f0833d2f"
     },
     {
       "rawName": "YASUMI LAB TOKYO",
