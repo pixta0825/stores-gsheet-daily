@@ -44,18 +44,35 @@ const DATA_DIR = path.join(__dirname, 'data');
 const MASTER_PATH = path.join(DATA_DIR, 'stores_master.json');
 const CHANGES_PATH = path.join(DATA_DIR, 'stores_master_changes.json');
 
-// ── 表示名の上書き（既存のシートタブ名・Slack表記を維持するための対応表）──
-// APIの生名（rawName）→ レポートで使う表示名。
+// ── 表示名の上書き（レポート上の店舗表記の正本）──
+// APIの生名（rawName）→ レポートで使う表示名。ここが日次売上レポートの店舗表記の
+// 単一の出所で、Slack DM・シートのタブ名・サマリー見出しがすべてこの名前になる。
 // ここに無い名前は「APIの生名をそのまま表示名にする」。つまり新店・改称店は
-// 何も足さなくても正しい名前で出る。既知店舗だけ従来表記を保って無用なタブ改名を防ぐ。
+// 何も足さなくても正しい名前で出る。
+//
+// 2026-09-06 恩田指示（REQ-0429）: ブランド略称＋半角スペース＋地名に統一
+//   （Y! Y! hands → 「YY 〇〇」／YASUMI LAB → 「LAB 〇〇」）。
+// ここを変えると sync が renamed を検出して prevName を立て、upload-gsheet が
+// 既存タブを改名して履歴ごと引き継ぐ（新タブを作らないので当月分が孤児にならない）。
+// ★この表記は Y社週報 の名寄せ（Y社週報/scripts/extract_weekly.py の norm_store）
+//   も読む。ここを変えたら向こうにも同じラベルを足すこと。足し忘れると週報側で
+//   その店舗の売上が黙って0になる（2026-07 の京都改称と同じ事故）。
 const DISPLAY_NAME_OVERRIDES = {
-  'Y! Y! hands名古屋': 'YY HANDS名古屋',
-  'Y! Y! hands東京': 'YYHANDS東京',
-  'Y! Y! hands大阪': 'YYHANDS大阪',
-  'Y! Y! hands新宿': 'YYHANDS新宿',
-  'Y! Y! hands渋谷': 'YYHANDS渋谷',
-  'Y! Y! hands原宿': 'YYHANDS原宿',
-  'YASUMI LAB NAGOYA': 'YASUMI LAB名古屋',
+  'Y! Y! hands名古屋': 'YY 名古屋',
+  'Y! Y! hands東京': 'YY 東京',
+  'Y! Y! hands渋谷': 'YY 渋谷',
+  'Y! Y! hands原宿': 'YY 原宿',
+  'Y! Y! hands京都': 'YY 京都',
+  'YASUMI LAB NAGOYA': 'LAB 名古屋',
+  'YASUMI LAB TOKYO': 'LAB 東京',
+  'YASUMI LAB OSAKA': 'LAB 大阪',
+  'YASUMI LAB 代官山': 'LAB 代官山',
+  '2525ジュエリー名古屋': '2525',
+  // 現在APIには出ない旧名（大阪＝LAB大阪へ、新宿＝Coppice吉祥寺へ改称済）。
+  // 万一戻ったときに旧表記へ逆戻りしないよう、表記ルールだけ残す。
+  'Y! Y! hands大阪': 'YY 大阪',
+  'Y! Y! hands新宿': 'YY 新宿',
+  // 'Coppice吉祥寺' はAPIの生名をそのまま使う（上書き不要）
 };
 
 function log(msg) {

@@ -16,16 +16,12 @@ const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || '1ZiZE3bkB25aeeawQIPyiLa
 const args = process.argv.slice(2);
 const DRY_RUN = args.includes('--dry-run');
 
-// 店舗名マッピング（短縮名 → フル名）
-const SHORT_TO_FULL = {
-  'YY名古屋': 'YY HANDS名古屋',
-  'YY東京': 'YYHANDS東京',
-  'YY大阪': 'YYHANDS大阪',
-  'LAB': 'YASUMI LAB名古屋',
-  '2525': '2525ジュエリー名古屋',
-  'BONSAI': 'HELLO BONSAI CLUB',
-  'YY新宿': 'YYHANDS新宿',
-};
+// 店舗名マッピング（サマリー見出し → 表示名）
+// 2026-09-06（REQ-0429）: 表示名を「YY 名古屋」「LAB 大阪」形式に統一し、
+// サマリー見出しがそのまま表示名になったので空にした。旧マッピングを残すと
+// 見出しが旧短縮名に戻ったときだけ旧フル名に展開されて日次と食い違う。
+// 表示名の正本は sync-stores-master.js の DISPLAY_NAME_OVERRIDES。
+const SHORT_TO_FULL = {};
 
 // ── Google API 認証 ──
 function getAuth() {

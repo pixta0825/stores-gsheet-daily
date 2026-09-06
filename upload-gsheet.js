@@ -330,18 +330,12 @@ async function formatSheet(sheets, spreadsheetId, sheetId, sheetTitle, dataRowCo
 //   店舗が改称されてもサマリー見出しだけ旧名のまま残る（タブ名と食い違い、
 //   この見出しを読む Y社週報 も旧名で集計してしまう）。表示名で引けば、
 //   改称された店舗は自動的にこの表から外れて新しい名前が見出しに出る。
-const SHORT_NAMES_BY_NAME = {
-  'YY HANDS名古屋': 'YY名古屋',
-  'YYHANDS東京': 'YY東京',
-  'YYHANDS大阪': 'YY大阪',
-  'YYHANDS新宿': 'YY新宿',
-  'YYHANDS渋谷': 'YY渋谷',
-  'YYHANDS原宿': 'YY原宿',
-  'YASUMI LAB名古屋': 'LAB名古屋',
-  'YASUMI LAB TOKYO': 'LAB東京',
-  '2525ジュエリー名古屋': '2525',
-  'HELLO BONSAI CLUB': 'BONSAI',
-};
+//
+// 2026-09-06（REQ-0429）: 表示名そのものを「YY 名古屋」「LAB 大阪」の短い表記に
+// 統一したため、ここで短縮する必要がなくなり空にした（表示名の正本は
+// sync-stores-master.js の DISPLAY_NAME_OVERRIDES 一箇所）。
+// 見出しに収まらない長い名前の新店が出たときだけ、ここに1行足して短縮する。
+const SHORT_NAMES_BY_NAME = {};
 
 const SUMMARY_SHEETS = [
   { title: '純売上', colIndex: 1, format: 'NUMBER', pattern: '#,##0', chartTitle: '店舗別売上',     stacked: 'STACKED', lastColLabel: '合計' },
