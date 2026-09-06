@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-05T23:10:27.357Z",
+  "generatedAt": "2026-09-06T02:56:40.418Z",
   "source": "STORES 公式 retail API /sales_channels（sync-stores-master.js）",
   "storeCount": 12,
   "stores": [
@@ -11,39 +11,45 @@
     },
     {
       "rawName": "Y! Y! hands名古屋",
-      "name": "YY HANDS名古屋",
+      "name": "YY 名古屋",
       "slug": "yyhands_nagoya",
-      "salesChannelId": "681b02b1b7ac330049f2abcc"
+      "salesChannelId": "681b02b1b7ac330049f2abcc",
+      "prevName": "YY HANDS名古屋"
     },
     {
       "rawName": "Y! Y! hands東京",
-      "name": "YYHANDS東京",
+      "name": "YY 東京",
       "slug": "yyhands_tokyo",
-      "salesChannelId": "6940c8274683791b9ae0058a"
+      "salesChannelId": "6940c8274683791b9ae0058a",
+      "prevName": "YYHANDS東京"
     },
     {
       "rawName": "YASUMI LAB OSAKA",
-      "name": "YASUMI LAB OSAKA",
+      "name": "LAB 大阪",
       "slug": "yasumi_lab_osaka",
-      "salesChannelId": "6940c855e0c48f1a99481d83"
+      "salesChannelId": "6940c855e0c48f1a99481d83",
+      "prevName": "YASUMI LAB OSAKA"
     },
     {
       "rawName": "YASUMI LAB NAGOYA",
-      "name": "YASUMI LAB名古屋",
+      "name": "LAB 名古屋",
       "slug": "yasumilab_nagoya",
-      "salesChannelId": "6940c871bd17481c37c99de9"
+      "salesChannelId": "6940c871bd17481c37c99de9",
+      "prevName": "YASUMI LAB名古屋"
     },
     {
       "rawName": "2525ジュエリー名古屋",
-      "name": "2525ジュエリー名古屋",
+      "name": "2525",
       "slug": "2525jewelry_nagoya",
-      "salesChannelId": "6940c888bd17481c37c99dea"
+      "salesChannelId": "6940c888bd17481c37c99dea",
+      "prevName": "2525ジュエリー名古屋"
     },
     {
       "rawName": "Y! Y! hands京都",
-      "name": "Y! Y! hands京都",
+      "name": "YY 京都",
       "slug": "y_y_hands",
-      "salesChannelId": "6960aeb4e7c5ab0aaa10f966"
+      "salesChannelId": "6960aeb4e7c5ab0aaa10f966",
+      "prevName": "Y! Y! hands京都"
     },
     {
       "rawName": "Coppice吉祥寺",
@@ -53,27 +59,31 @@
     },
     {
       "rawName": "YASUMI LAB TOKYO",
-      "name": "YASUMI LAB TOKYO",
+      "name": "LAB 東京",
       "slug": "yasumilab_tokyo",
-      "salesChannelId": "69e03136d9e28df3f61314ba"
+      "salesChannelId": "69e03136d9e28df3f61314ba",
+      "prevName": "YASUMI LAB TOKYO"
     },
     {
       "rawName": "Y! Y! hands渋谷",
-      "name": "YYHANDS渋谷",
+      "name": "YY 渋谷",
       "slug": "yyhands_shibuya",
-      "salesChannelId": "69f43c0d248f8c08e31ba380"
+      "salesChannelId": "69f43c0d248f8c08e31ba380",
+      "prevName": "YYHANDS渋谷"
     },
     {
       "rawName": "Y! Y! hands原宿",
-      "name": "YYHANDS原宿",
+      "name": "YY 原宿",
       "slug": "yyhands_harajuku",
-      "salesChannelId": "69f43d5cfc56600a9d3552c2"
+      "salesChannelId": "69f43d5cfc56600a9d3552c2",
+      "prevName": "YYHANDS原宿"
     },
     {
       "rawName": "YASUMI LAB 代官山",
-      "name": "YASUMI LAB 代官山",
+      "name": "LAB 代官山",
       "slug": "yasumi_lab",
-      "salesChannelId": "6a4f4ad412d0390a4fe48186"
+      "salesChannelId": "6a4f4ad412d0390a4fe48186",
+      "prevName": "YASUMI LAB 代官山"
     }
   ]
 }
