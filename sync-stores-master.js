@@ -157,6 +157,15 @@ async function main() {
     if (p.name !== name) {
       renamed.push({ slug: p.slug, from: p.name, to: name });
       entry.prevName = p.name;      // upload-gsheet がタブ改名に使う
+    } else if (p.prevName && p.prevName !== name) {
+      // ★改称を「検出する sync」と「タブを改名する upload」が別の実行になることがある。
+      //   週次セーフティネットや手動dispatchでは sync だけが走るため、そこで立てた
+      //   prevName を次の sync が「差分なし」として消してしまうと、改名は永久に発火せず、
+      //   upload は新名の空タブを作って旧名タブに当月実績を置き去りにする。
+      //   （2026-09-07 実害: 旧名タブ10枚が9/5で凍結、新名タブが別に生えた）
+      //   → 一度立った prevName は、実際に改名される（＝旧名タブが消える）まで持ち回す。
+      //   upload 側の改名は「旧名タブがある時だけ」動くので、残り続けても無害。
+      entry.prevName = p.prevName;
     }
     stores.push(entry);
   }
