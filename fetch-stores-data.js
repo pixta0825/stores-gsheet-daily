@@ -19,11 +19,22 @@ function loadStores() {
     if (fs.existsSync(MASTER_PATH)) {
       const m = JSON.parse(fs.readFileSync(MASTER_PATH, 'utf-8'));
       if (Array.isArray(m.stores) && m.stores.length >= 2) {
-        return m.stores.map(s => ({
-          name: s.name,
-          slug: s.slug,
-          salesChannelId: s.salesChannelId,
-        }));
+        // 営業終了した店舗は取得対象から外す（sync-stores-master.js の
+        // CLOSED_SALES_CHANNELS が印を付ける）。黙って消えると取得失敗と
+        // 見分けが付かないので、外した店舗は必ずログに出す。
+        const closed = m.stores.filter(s => s.closed);
+        const active = m.stores.filter(s => !s.closed);
+        for (const c of closed) {
+          console.log(`🚫 営業終了のため取得対象外: ${c.name} — ${c.closedReason || '理由未設定'} (${c.closedAt || '日付未設定'})`);
+        }
+        if (active.length >= 2) {
+          return active.map(s => ({
+            name: s.name,
+            slug: s.slug,
+            salesChannelId: s.salesChannelId,
+          }));
+        }
+        console.warn('⚠️ 営業中の店舗が2件未満になりました。除外設定を見直してください');
       }
     }
   } catch (e) {

@@ -75,6 +75,28 @@ const DISPLAY_NAME_OVERRIDES = {
   // 'Coppice吉祥寺' はAPIの生名をそのまま使う（上書き不要）
 };
 
+// ── 営業終了した販売チャネル ──
+// STORES側に販売チャネルが残っている限り公式APIは返し続けるので、終了した店舗は
+// ここで明示的に閉じる。closed が立った店舗は日次・週次レポートの取得対象から外れる
+// （過去データのシートタブは残るので、履歴は失われない）。
+//
+// なぜマスタJSONを直接編集しないか: stores_master.json は日次ジョブが毎朝APIから
+// 作り直してcommitするため、手で書いた印は翌朝消える。定義はコード側に置く。
+//
+// 再開したらその行を消せば、翌日の sync で自動的に取得対象へ戻る。
+const CLOSED_SALES_CHANNELS = {
+  // Coppice吉祥寺（slug: yyhands_shinjuku）: 催事出店。2026-09-06 をもって終了。
+  // 2026-09-14 恩田確認「吉祥寺は催事終了。今後は売上発生せず」(REQ-0488)
+  '69ae3f7326307605f0833d2f': { closedAt: '2026-09-06', reason: '催事終了' },
+};
+
+/** 営業終了チャネルなら closed 印を付けて返す */
+function withClosedFlag(entry) {
+  const c = entry.salesChannelId ? CLOSED_SALES_CHANNELS[entry.salesChannelId] : null;
+  if (!c) return entry;
+  return { ...entry, closed: true, closedAt: c.closedAt, closedReason: c.reason };
+}
+
 function log(msg) {
   console.log(`[${new Date().toLocaleTimeString('ja-JP')}] ${msg}`);
 }
@@ -144,7 +166,7 @@ async function main() {
     if (!ch) {
       // APIに出てこない既知店舗 → 消さずに残す（部分応答による欠損事故の防止）
       absent.push(p.name);
-      stores.push({ ...p, absentFromApi: true });
+      stores.push(withClosedFlag({ ...p, absentFromApi: true }));
       continue;
     }
     const name = displayName(ch.name);
@@ -167,7 +189,7 @@ async function main() {
       //   upload 側の改名は「旧名タブがある時だけ」動くので、残り続けても無害。
       entry.prevName = p.prevName;
     }
-    stores.push(entry);
+    stores.push(withClosedFlag(entry));
   }
 
   // 2) 旧マスタに無いチャネル = 新店。末尾に追加する
@@ -176,7 +198,7 @@ async function main() {
     const slug = makeSlug(ch.name, ch.id, used);
     used.add(slug);
     const name = displayName(ch.name);
-    stores.push({ rawName: ch.name, name, slug, salesChannelId: ch.id });
+    stores.push(withClosedFlag({ rawName: ch.name, name, slug, salesChannelId: ch.id }));
     added.push(name);
   }
 
@@ -200,6 +222,7 @@ async function main() {
 
   if (added.length) log(`🆕 新規店舗: ${added.join(', ')}`);
   for (const r of renamed) log(`✏️  改称: ${r.from} → ${r.to}`);
+  for (const c of stores.filter(x => x.closed)) log(`🚫 営業終了（取得対象外）: ${c.name} — ${c.closedReason} (${c.closedAt})`);
   if (absent.length) log(`⚠️ APIに存在しない既知店舗（マスタ保持）: ${absent.join(', ')}`);
   if (!changes.hasChanges) log('  差分なし（既存と同じ店舗構成）');
 }
@@ -215,4 +238,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { main, makeSlug, displayName, DISPLAY_NAME_OVERRIDES };
+module.exports = { main, makeSlug, displayName, DISPLAY_NAME_OVERRIDES, CLOSED_SALES_CHANNELS };

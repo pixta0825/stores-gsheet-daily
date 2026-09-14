@@ -1,3 +1,11 @@
+---
+title: "STORES POS 売上データ → Google Spreadsheet 自動取得 + Slack通知 手順書"
+updated: 2026-05-13
+author: 恩田
+business_area: YS
+status: final
+---
+
 # STORES POS 売上データ → Google Spreadsheet 自動取得 + Slack通知 手順書
 
 ## 概要
