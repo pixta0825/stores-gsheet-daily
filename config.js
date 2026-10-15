@@ -78,4 +78,31 @@ const COLUMNS = [
   '単価',
 ];
 
-module.exports = { STORES, COLUMNS, BASE_URL, COMMON_PARAMS };
+// ── 消費税の課税事業者化（YASUMI WORKS: 2026-11-01〜）──
+// この日以降の「純売上」「単価」は税抜ベースで報告する。それ以前は従来どおり税込。
+// 環境変数 TAX_EXCLUSIVE_FROM は検証用の前倒し（'YYYY-MM-DD'）。
+const TAX_EXCLUSIVE_FROM = process.env.TAX_EXCLUSIVE_FROM || '2026-11-01';
+
+// 'YYYY-MM-DD' が切替日以降なら true（文字列比較でJST暦日をそのまま判定）
+function isTaxExclusive(ymd) {
+  return String(ymd) >= TAX_EXCLUSIVE_FROM;
+}
+
+// 'YYYYMM' の月全体が切替日以降なら true（月初日で判定。切替日が月初なら月と1対1）
+function isTaxExclusiveMonth(yyyymm) {
+  const s = String(yyyymm);
+  return isTaxExclusive(`${s.slice(0, 4)}-${s.slice(4, 6)}-01`);
+}
+
+// 'YYYYMM' の月に切替日以降の日が1日でも含まれるなら true（メモ付与の判定用）
+function hasTaxExclusiveDays(yyyymm) {
+  const s = String(yyyymm);
+  const y = parseInt(s.slice(0, 4), 10), m = parseInt(s.slice(4, 6), 10);
+  const last = new Date(y, m, 0).getDate();
+  return isTaxExclusive(`${s.slice(0, 4)}-${s.slice(4, 6)}-${String(last).padStart(2, '0')}`);
+}
+
+module.exports = {
+  STORES, COLUMNS, BASE_URL, COMMON_PARAMS,
+  TAX_EXCLUSIVE_FROM, isTaxExclusive, isTaxExclusiveMonth, hasTaxExclusiveDays,
+};

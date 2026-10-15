@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
 const { withRetry } = require('./gapi-retry');
+const { isTaxExclusive } = require('./config');
 
 const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || '1ZiZE3bkB25aeeawQIPyiLazm_iabQJmj';
 
@@ -162,6 +163,15 @@ function getDayOfWeek(date) {
   return `（${days[date.getDay()]}）`;
 }
 
+// ── 月曜から7日分のDate配列 ──
+function weekDays(monday) {
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+}
+
 // ── Slackメッセージを組み立て ──
 function buildWeeklyMessage(monday, sunday, storeData, monthFiles = {}) {
   const monYear = monday.getFullYear();
@@ -182,7 +192,22 @@ function buildWeeklyMessage(monday, sunday, storeData, monthFiles = {}) {
   const totalAvg = totalCount > 0 ? Math.round(totalSales / totalCount) : 0;
 
   message += `_*【全店舗合計】*_\n`;
-  message += `純売上: _${formatYen(totalSales)}_\u3000|\u3000件数: _${totalCount}件_\u3000|\u3000単価: _${formatYen(totalAvg)}_\n\n`;
+  // 課税事業者化（切替日）以降の日は税抜ベース。週の全日が切替後なら見出しに明記、
+  // 週の途中に切替日があれば基準が混在する旨を注記（各日の値は日別に正しい基準で入っている）。
+  const ymdOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const exFlags = weekDays(monday).map(d => isTaxExclusive(ymdOf(d)));
+  const allEx = exFlags.every(Boolean);
+  const mixed = !allEx && exFlags.some(Boolean);
+  message += `${allEx ? '純売上（税抜）' : '純売上'}: _${formatYen(totalSales)}_\u3000|\u3000件数: _${totalCount}件_\u3000|\u3000単価: _${formatYen(totalAvg)}_\n\n`;
+
+  if (mixed) {
+    const firstEx = weekDays(monday).find(d => isTaxExclusive(ymdOf(d)));
+    const fmt = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
+    const lastTaxInc = new Date(firstEx); lastTaxInc.setDate(firstEx.getDate() - 1);
+    const taxIncRange = lastTaxInc.getTime() === monday.getTime() ? fmt(monday) : `${fmt(monday)}〜${fmt(lastTaxInc)}`;
+    const taxExRange = firstEx.getTime() === sunday.getTime() ? fmt(sunday) : `${fmt(firstEx)}〜${fmt(sunday)}`;
+    message += `_※${taxIncRange}は税込、${taxExRange}は税抜（${firstEx.getMonth() + 1}月から課税事業者のため）_\n\n`;
+  }
 
   // 店舗別（売上降順ソート）
   const entries = Object.entries(storeData)
@@ -259,7 +284,11 @@ async function main() {
   }
 }
 
-main().catch(err => {
-  console.error('❌ エラー:', err.message);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(err => {
+    console.error('❌ エラー:', err.message);
+    process.exit(1);
+  });
+}
+
+module.exports = { buildWeeklyMessage };

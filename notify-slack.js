@@ -8,6 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { verifyGate, buildWarningBanner } = require('./verify-gate');
+const { isTaxExclusive } = require('./config');
 
 const DATA_DIR = path.join(__dirname, 'data');
 
@@ -267,7 +268,11 @@ function buildSlackMessage(targetLabel, dailyData, allData, options = {}) {
 
   if (computedTotal.netSales > 0 || (scrapedAll && scrapedAll.netSales > 0)) {
     message += `_*【全店舗合計】*_\n`;
-    message += `純売上: _${formatYen(computedTotal.netSales)}_\u3000|\u3000件数: _${computedTotal.transactions}件_\u3000|\u3000単価: _${formatYen(computedTotal.avgPrice)}_\n\n`;
+    // 課税事業者化（切替日）以降の日は税抜ベースの値なので見出しで明示
+    const md = targetLabel.match(/(\d+)月(\d+)日/);
+    const targetYmd = md ? `${year}-${String(md[1]).padStart(2, '0')}-${String(md[2]).padStart(2, '0')}` : null;
+    const salesWord = targetYmd && isTaxExclusive(targetYmd) ? '純売上（税抜）' : '純売上';
+    message += `${salesWord}: _${formatYen(computedTotal.netSales)}_\u3000|\u3000件数: _${computedTotal.transactions}件_\u3000|\u3000単価: _${formatYen(computedTotal.avgPrice)}_\n\n`;
   }
 
   // 店舗別（全店舗以外）を売上降順でソート

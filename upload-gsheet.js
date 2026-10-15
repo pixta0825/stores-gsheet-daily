@@ -14,7 +14,7 @@ const path = require('path');
 const { google } = require('googleapis');
 const { withRetry } = require('./gapi-retry');
 
-const { STORES: STORES_FALLBACK, COLUMNS } = require('./config');
+const { STORES: STORES_FALLBACK, COLUMNS, hasTaxExclusiveDays } = require('./config');
 
 // 起動時に店舗リストを解決：master.json 優先、config.js フォールバック
 function loadStores() {
@@ -505,6 +505,14 @@ async function createSummarySheets(sheets, spreadsheetId, allData, monthStr, col
 
     // 書式設定
     const formatRequests = [
+      // 課税事業者化（切替日）以降の日を含む月の「純売上」「単価」: A1にメモで基準を明示（値・見出しは不変）
+      ...((sheetTitle === '純売上' || sheetTitle === '単価') && hasTaxExclusiveDays(monthStr) ? [{
+        updateCells: {
+          start: { sheetId, rowIndex: 0, columnIndex: 0 },
+          rows: [{ values: [{ note: '2026年11月以降の純売上・単価は税抜（消費税課税事業者化のため）' }] }],
+          fields: 'note',
+        },
+      }] : []),
       // ヘッダー行: 紺背景・白太字
       {
         repeatCell: {

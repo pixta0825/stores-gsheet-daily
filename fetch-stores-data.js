@@ -7,7 +7,7 @@ const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
 
-const { STORES: STORES_FALLBACK, BASE_URL } = require('./config');
+const { STORES: STORES_FALLBACK, BASE_URL, isTaxExclusive } = require('./config');
 
 const MASTER_PATH = require('path').join(__dirname, 'data', 'stores_master.json');
 
@@ -359,6 +359,34 @@ function parseTableFromText(text) {
   return result;
 }
 
+// ── 課税事業者化（切替日以降）の純売上・単価を税抜ベースに置換 ──
+// rawTable の行 = [日付, 純売上, 純売上（税抜）, 消費税, ..., 件数, 単価]。
+// 切替日以降の日別行は 純売上=税抜・単価=税抜/件数。期間合計は日別行の合算（切替日が無ければ不変）。
+function applyTaxBasis(rawTable, year, month) {
+  if (!rawTable) return rawTable;
+  const rows = rawTable.map(r => r.slice());
+  let anyEx = false, sumRep = 0, sumCnt = 0, summaryRow = null;
+  for (const row of rows) {
+    const label = String(row[0]);
+    if (label.includes('合計') || label.includes('期間')) { summaryRow = row; continue; }
+    const m = label.match(/(\d+)月(\d+)日/);
+    const num = (v) => (typeof v === 'number' ? v : parseNumber(String(v)));
+    if (m && isTaxExclusive(`${year}-${String(m[1]).padStart(2, '0')}-${String(m[2]).padStart(2, '0')}`)) {
+      anyEx = true;
+      row[1] = num(row[2]);
+      const cnt = num(row[9]);
+      row[10] = cnt ? Math.round(row[1] / cnt) : 0;
+    }
+    sumRep += num(row[1]);
+    sumCnt += num(row[9]);
+  }
+  if (anyEx && summaryRow) {
+    summaryRow[1] = sumRep;
+    summaryRow[10] = sumCnt ? Math.round(sumRep / sumCnt) : 0;
+  }
+  return rows;
+}
+
 // ── テーブルデータを構造化 ──
 function structureData(rawTable) {
   if (!rawTable || rawTable.length === 0) return null;
@@ -446,10 +474,11 @@ async function main() {
         try {
           const rawTable = await scrapeStore(page, store);
           if (rawTable) {
-            const structured = structureData(rawTable);
+            const adjusted = applyTaxBasis(rawTable, year, month);
+            const structured = structureData(adjusted);
             allData.stores[store.slug] = {
               name: store.name,
-              raw: rawTable,
+              raw: adjusted,
               data: structured,
             };
             success = true;
@@ -522,4 +551,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { main, getMonthString, getYearMonth };
+module.exports = { main, getMonthString, getYearMonth, applyTaxBasis };

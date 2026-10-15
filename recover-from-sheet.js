@@ -29,6 +29,14 @@ const CLEAR = getArg('clear');   // 例: 202606（このシートの全タブの
 const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || '1ZiZE3bkB25aeeawQIPyiLazm_iabQJmj';
 const DATA_DIR = path.join(__dirname, 'data');
 
+// 月をまたぐ復旧は純売上・単価の基準（税込/税抜）が混ざる恐れがあるため警告（課税事業者化の切替日）
+{
+  const { isTaxExclusiveMonth } = require('./config');
+  if (SOURCE && TARGET && isTaxExclusiveMonth(SOURCE) !== isTaxExclusiveMonth(TARGET)) {
+    console.warn(`⚠️ 復旧元(${SOURCE})と復旧先(${TARGET})で純売上の基準（税込/税抜）が異なります。値の基準を確認してください`);
+  }
+}
+
 // 店舗解決（master.json 優先、config.js フォールバック）
 function loadStores() {
   try {

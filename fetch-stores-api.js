@@ -14,6 +14,8 @@
 //   返品点数       itemsReturned  = Σ 明細quantity（キャンセル済み配送）  ※返品実データで要再検証
 //   件数           transactions   = 注文数
 //   単価           avgPrice       = round(netSales / transactions)
+//   ※ 課税事業者化（config.js の切替日）以降の日は netSales=税抜・avgPrice=税抜ベース。
+//     期間合計は日別の合算（日別の基準がそのまま積み上がる）。
 // 日付の帰属は注文の ordered_at（JST）の暦日。
 // ────────────────────────────────────────────────────────────
 
@@ -34,7 +36,7 @@ try {
   }
 }
 
-const { STORES: STORES_FALLBACK } = require('./config');
+const { STORES: STORES_FALLBACK, isTaxExclusive } = require('./config');
 const { fetchOrders } = require('./stores-api-client');
 
 const MASTER_PATH = path.join(__dirname, 'data', 'stores_master.json');
@@ -132,11 +134,14 @@ function addOrderTo(g, o) {
   }
 }
 
-function aggToRecord(label, g) {
+// exTax=true なら報告用の純売上・単価を税抜ベースにする（netSalesExTax・tax 等は不変）。
+// repNet は報告用純売上の明示値（期間合計で日別の合算値を渡す用）。
+function aggToRecord(label, g, exTax = false, repNet = null) {
   const net = g.net, tax = g.tax;
+  const rep = repNet !== null ? repNet : (exTax ? net - tax : net);
   return {
     label,
-    netSales: net,
+    netSales: rep,
     netSalesExTax: net - tax,
     tax,
     grossSales: g.gross,
@@ -145,7 +150,7 @@ function aggToRecord(label, g) {
     itemsSold: g.sold,
     itemsReturned: g.returned,
     transactions: g.cnt,
-    avgPrice: g.cnt ? Math.round(net / g.cnt) : 0,
+    avgPrice: g.cnt ? Math.round(rep / g.cnt) : 0,
   };
 }
 
@@ -195,17 +200,21 @@ async function main() {
 
     // 期間合計
     const total = emptyAgg();
+    let totalRep = 0; // 報告用純売上の日別合算（切替日をまたぐ場合も日別の基準のまま）
     const dailyRecords = [];
     for (let day = startDay; day <= endDay; day++) {
       const g = dayMap[day] || emptyAgg();
       const label = `${month}月${day}日（${jstWeekday(year, month, day)}）`;
-      dailyRecords.push(aggToRecord(label, g));
+      const exTax = isTaxExclusive(`${year}-${pad(month)}-${pad(day)}`);
+      const rec = aggToRecord(label, g, exTax);
+      dailyRecords.push(rec);
+      totalRep += rec.netSales;
       // 合計加算
       total.net += g.net; total.tax += g.tax; total.gross += g.gross;
       total.disc += g.disc; total.refund += g.refund;
       total.sold += g.sold; total.returned += g.returned; total.cnt += g.cnt;
     }
-    const summaryRecord = aggToRecord('期間合計', total);
+    const summaryRecord = aggToRecord('期間合計', total, false, totalRep);
 
     const records = [summaryRecord, ...dailyRecords];
     allData.stores[store.slug] = {
@@ -243,4 +252,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { main };
+module.exports = { main, aggToRecord, emptyAgg };
