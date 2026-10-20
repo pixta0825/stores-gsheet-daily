@@ -15,6 +15,7 @@ const { google } = require('googleapis');
 const { withRetry } = require('./gapi-retry');
 
 const { STORES: STORES_FALLBACK, COLUMNS, hasTaxExclusiveDays } = require('./config');
+const { storesForMonth } = require('./store-names');
 
 // 起動時に店舗リストを解決：master.json 優先、config.js フォールバック
 function loadStores() {
@@ -26,7 +27,7 @@ function loadStores() {
         // prevName（改称前の表示名）まで持ち回す。ここで落とすと改称時のタブ改名が
         // 発火せず、新名の空タブが増えて旧名タブに実績が取り残される。
         return m.stores.map(s => ({
-          name: s.name, slug: s.slug, salesChannelId: s.salesChannelId, prevName: s.prevName,
+          name: s.name, slug: s.slug, salesChannelId: s.salesChannelId, prevName: s.prevName, officialName: s.officialName,
         }));
       }
     }
@@ -35,7 +36,10 @@ function loadStores() {
   }
   return STORES_FALLBACK.map(s => ({ name: s.name, slug: s.slug, salesChannelId: (s.url.match(/salesChannelId=([^&]+)/) || [])[1] || null }));
 }
-const STORES = loadStores();
+const BASE_STORES = loadStores();
+// 店舗名は「データの月」で決める（2026年11月以降の月ファイルは正式表記・store-names.js）。
+// main() の冒頭で対象月に合わせて差し替える（createSummarySheets 等がこの STORES を読む）。
+let STORES = BASE_STORES;
 
 // ── CLI引数 ──
 const args = process.argv.slice(2);
@@ -369,7 +373,7 @@ async function createSummarySheets(sheets, spreadsheetId, allData, monthStr, col
   //   丸ごと消え、日次合計まで過少になる事故を防ぐ。当回未取得の店舗は、シートに残る
   //   既存の個別タブ（前回までの実績）から日別データを復旧して列を維持する。
   //   （2026-06: YY名古屋 6/1-6/7 売上欠落の根本対応）
-  const masterStores = STORES.filter(s => s.slug !== 'all');
+  const masterStores = storesForMonth(BASE_STORES, monthStr).filter(s => s.slug !== 'all');   // データ月の表記
   const individualStores = [];
   const storeDataByDay = {};
   const recoveredStores = [];
@@ -651,14 +655,14 @@ async function createSummarySheets(sheets, spreadsheetId, allData, monthStr, col
 }
 
 // ── 空シート構造のみ作成（CREATE_ONLY 用） ──
-async function ensureEmptySpreadsheet(sheets, drive, title) {
+async function ensureEmptySpreadsheet(sheets, drive, title, monthStr) {
   const existing = await findExistingSpreadsheet(drive, title);
   if (existing) {
     console.log(`📄 既存スプレッドシート発見、作成スキップ: ${existing.name} (${existing.id})`);
     return existing.id;
   }
   // 'all' を除く全店舗のシートで新規作成
-  const storeNamesAll = STORES.filter(s => s.slug !== 'all').map(s => s.name);
+  const storeNamesAll = storesForMonth(BASE_STORES, monthStr).filter(s => s.slug !== 'all').map(s => s.name);
   const spreadsheetId = await createSpreadsheet(sheets, drive, title, storeNamesAll);
   console.log(`✅ 空スプレッドシート作成: https://docs.google.com/spreadsheets/d/${spreadsheetId}`);
   return spreadsheetId;
@@ -670,6 +674,7 @@ async function main() {
   const year = parseInt(monthStr.substring(0, 4), 10);
   const month = parseInt(monthStr.substring(4, 6), 10);
   const title = `STORES_売上_${monthStr}`;
+  STORES = storesForMonth(BASE_STORES, monthStr);
 
   console.log('═══════════════════════════════════════════');
   console.log(' Google Spreadsheet アップロード');
@@ -685,7 +690,7 @@ async function main() {
     const sheets = google.sheets({ version: 'v4', auth });
     const drive = google.drive({ version: 'v3', auth });
     await verifyFolderAccess(drive);
-    const spreadsheetId = await ensureEmptySpreadsheet(sheets, drive, title);
+    const spreadsheetId = await ensureEmptySpreadsheet(sheets, drive, title, monthStr);
     return `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
   }
 
@@ -828,7 +833,7 @@ async function main() {
     const nextTitle = `STORES_売上_${nextMonth}`;
     console.log(`\n📅 月末先回り: 翌月分 ${nextTitle} を確認...`);
     try {
-      await ensureEmptySpreadsheet(sheets, drive, nextTitle);
+      await ensureEmptySpreadsheet(sheets, drive, nextTitle, nextMonth);
     } catch (e) {
       console.error(`  ⚠️  翌月先回り失敗（続行）: ${e.message}`);
     }

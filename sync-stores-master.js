@@ -39,6 +39,7 @@ try {
 }
 
 const { fetchSalesChannels } = require('./stores-api-client');
+const { officialNameOf } = require('./store-names');
 
 const DATA_DIR = path.join(__dirname, 'data');
 const MASTER_PATH = path.join(DATA_DIR, 'stores_master.json');
@@ -57,6 +58,10 @@ const CHANGES_PATH = path.join(DATA_DIR, 'stores_master_changes.json');
 // ★この表記は Y社週報 の名寄せ（Y社週報/scripts/extract_weekly.py の norm_store）
 //   も読む。ここを変えたら向こうにも同じラベルを足すこと。足し忘れると週報側で
 //   その店舗の売上が黙って0になる（2026-07 の京都改称と同じ事故）。
+// 【2026-11-01〜の正式表記（REQ-0722）】下のOVERRIDESは「従来表記（〜2026年10月分）」で、10月以前の
+// 月ファイルはこのまま。正式12店（YY名古屋／LAB大阪／吉祥寺 等・スペースなし）は store-names.js の
+// OFFICIAL_NAME_BY_CHANNEL_ID（salesChannelId基準）が正本で、マスタの officialName に入る。
+// 月ファイルはデータ月が2026-11以降、Slackは投稿日が11/1以降で切り替わる。
 const DISPLAY_NAME_OVERRIDES = {
   'Y! Y! hands名古屋': 'YY 名古屋',
   'Y! Y! hands東京': 'YY 東京',
@@ -176,6 +181,9 @@ async function main() {
       slug: p.slug,                 // slug は不変（過去データとの対応を壊さない）
       salesChannelId: ch.id,
     };
+    // 正式表記（2026-11-01〜の月ファイル・Slackで使う。nameは従来表記のまま）。store-names.js 参照
+    const official = officialNameOf({ slug: p.slug, salesChannelId: ch.id });
+    if (official) entry.officialName = official;
     if (p.name !== name) {
       renamed.push({ slug: p.slug, from: p.name, to: name });
       entry.prevName = p.name;      // upload-gsheet がタブ改名に使う
@@ -198,7 +206,10 @@ async function main() {
     const slug = makeSlug(ch.name, ch.id, used);
     used.add(slug);
     const name = displayName(ch.name);
-    stores.push(withClosedFlag({ rawName: ch.name, name, slug, salesChannelId: ch.id }));
+    const newEntry = { rawName: ch.name, name, slug, salesChannelId: ch.id };
+    const newOfficial = officialNameOf(newEntry);
+    if (newOfficial) newEntry.officialName = newOfficial;
+    stores.push(withClosedFlag(newEntry));
     added.push(name);
   }
 

@@ -42,13 +42,20 @@ function loadStores() {
   try {
     const m = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'stores_master.json'), 'utf-8'));
     if (Array.isArray(m.stores) && m.stores.length >= 2) {
-      return m.stores.map(s => ({ name: s.name, slug: s.slug }));
+      return m.stores.map(s => ({ name: s.name, slug: s.slug, salesChannelId: s.salesChannelId, officialName: s.officialName }));
     }
   } catch (e) { /* フォールバックへ */ }
   const { STORES } = require('./config');
   return STORES.map(s => ({ name: s.name, slug: s.slug }));
 }
 const STORES = loadStores();
+const { storesForMonth } = require('./store-names');
+// 店舗名は「データの月」で決める（2026年11月以降の月は正式表記）。
+// ソース月のタブ名で読み、復旧JSON（ターゲット月）にはターゲット月の表記で入れる。
+function nameFor(store, month) {
+  const s = storesForMonth([store], month)[0];
+  return s.name;
+}
 
 function getAuth() {
   if (!process.env.GOOGLE_CREDENTIALS) throw new Error('❌ GOOGLE_CREDENTIALS が未設定です');
@@ -153,7 +160,9 @@ async function main() {
   const tabTitles = ssInfo.data.sheets.map(s => s.properties.title);
 
   const stores = {};
-  for (const store of STORES) {
+  for (const baseStore of STORES) {
+    const store = { ...baseStore, name: nameFor(baseStore, SOURCE) };       // ソース月のタブ名
+    const targetName = nameFor(baseStore, TARGET);                           // 復旧JSONに入れる名前
     if (!tabTitles.includes(store.name)) {
       console.log(`  ⏭ タブなし: ${store.name}`);
       continue;
@@ -180,7 +189,7 @@ async function main() {
       console.log(`  ⚠️ 有効行なし: ${store.name}`);
       continue;
     }
-    stores[store.slug] = { name: store.name, raw, data: structureData(raw) };
+    stores[store.slug] = { name: targetName, raw, data: structureData(raw) };
     const total = stores[store.slug].data.summary?.netSales || 0;
     console.log(`  ✅ ${store.name}: ${raw.length}行（期間合計 ¥${total.toLocaleString()}）`);
   }

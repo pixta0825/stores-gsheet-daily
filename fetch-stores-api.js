@@ -38,6 +38,7 @@ try {
 
 const { STORES: STORES_FALLBACK, isTaxExclusive } = require('./config');
 const { fetchOrders } = require('./stores-api-client');
+const { storesForMonth, officialNameOf } = require('./store-names');
 
 const MASTER_PATH = path.join(__dirname, 'data', 'stores_master.json');
 const DATA_DIR = path.join(__dirname, 'data');
@@ -63,7 +64,7 @@ function loadStores() {
     if (fs.existsSync(MASTER_PATH)) {
       const m = JSON.parse(fs.readFileSync(MASTER_PATH, 'utf-8'));
       if (Array.isArray(m.stores) && m.stores.length >= 2) {
-        return m.stores.map((s) => ({ name: s.name, slug: s.slug, salesChannelId: s.salesChannelId }));
+        return m.stores.map((s) => ({ name: s.name, slug: s.slug, salesChannelId: s.salesChannelId, officialName: s.officialName }));
       }
     }
   } catch (e) {
@@ -160,9 +161,10 @@ const recordToRow = (r) => [
 ];
 
 async function main() {
-  const STORES = loadStores();
   const { year, month } = getTargetYearMonth();
   const monthStr = `${year}${pad(month)}`;
+  // 店舗名は「データの月」で決める（2026年11月以降の月は正式表記）
+  const STORES = storesForMonth(loadStores(), monthStr);
   const { startDay, endDay } = getDateRange(year, month);
   const from = `${year}-${pad(month)}-${pad(startDay)}T00:00:00+09:00`;
   const to = `${year}-${pad(month)}-${pad(endDay)}T23:59:59+09:00`;

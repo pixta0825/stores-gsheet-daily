@@ -24,6 +24,27 @@ const DRY_RUN = args.includes('--dry-run');
 // 表示名の正本は sync-stores-master.js の DISPLAY_NAME_OVERRIDES。
 const SHORT_TO_FULL = {};
 
+// ── 店舗名の正式表記切替（REQ-0722・store-names.js）──
+// 月別シートの列見出しは「データの月」の表記（10月ファイル＝従来表記／11月ファイル＝正式表記）なので、
+// 月またぎの週は見出しが食い違う。列の位置ではなく見出しの名前で同じ店舗を突き合わせ、
+// 内部キーは正式表記に寄せる。Slackの表示名は「投稿日」で決める（11/1以降の投稿は正式表記）。
+const { aliasToOfficial, slackName, officialNameOf } = require('./store-names');
+function loadMasterStoresForNames() {
+  try {
+    const m = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'stores_master.json'), 'utf-8'));
+    if (Array.isArray(m.stores)) return m.stores;
+  } catch (e) { /* マスタ無し → 見出しをそのまま使う */ }
+  return [];
+}
+const MASTER_STORES = loadMasterStoresForNames();
+const ALIAS_TO_OFFICIAL = aliasToOfficial(MASTER_STORES);
+const canonKey = (headerName) => ALIAS_TO_OFFICIAL[headerName] || headerName;
+// 内部キー（正式表記）→ Slack表示名。投稿日が11/1より前は従来表記（マスタの name）。
+function displayNameForKey(key) {
+  const st = MASTER_STORES.find(s => officialNameOf(s) === key);
+  return st ? slackName(st, st.name) : key;
+}
+
 // ── Google API 認証 ──
 function getAuth() {
   const credentialsJson = process.env.GOOGLE_CREDENTIALS;
@@ -113,9 +134,10 @@ async function aggregateWeeklyData(sheets, drive, weekDays) {
     if (salesRows.length === 0) continue;
 
     // ヘッダーから店舗名を取得（最初のSpreadsheetから）
-    if (!header) {
-      header = salesRows[0]; // ['日付', 'YY名古屋', 'YY東京', ..., '合計']
-    }
+    // この月ファイル自身の見出しを使う（月により表記・列順が違い得る）
+    const fileHeader = salesRows[0]; // ['日付', 'YY名古屋', 'YY東京', ..., '合計']
+    const countHeader = (countRows[0] || fileHeader);
+    if (!header) header = fileHeader;
 
     // 該当日のデータを合算
     for (const dayNum of dayNumbers) {
@@ -128,13 +150,16 @@ async function aggregateWeeklyData(sheets, drive, weekDays) {
       if (!salesRow) continue;
 
       // 各店舗（B列〜G列、index 1〜header.length-2）を集計
-      for (let i = 1; i < header.length - 1; i++) {
-        const shortName = header[i];
+      for (let i = 1; i < fileHeader.length - 1; i++) {
+        const shortName = canonKey(fileHeader[i]);
         if (!storeData[shortName]) {
           storeData[shortName] = { netSales: 0, transactions: 0 };
         }
+        // 客数シートは同じ店舗の列を見出し名で探す（見つからなければ同じ位置）
+        let ci = countHeader.findIndex(h => canonKey(h) === shortName);
+        if (ci < 0) ci = i;
         const sales = parseInt(String(salesRow[i]).replace(/,/g, ''), 10) || 0;
-        const count = countRow ? (parseInt(String(countRow[i]).replace(/,/g, ''), 10) || 0) : 0;
+        const count = countRow ? (parseInt(String(countRow[ci]).replace(/,/g, ''), 10) || 0) : 0;
         storeData[shortName].netSales += sales;
         storeData[shortName].transactions += count;
       }
@@ -212,7 +237,7 @@ function buildWeeklyMessage(monday, sunday, storeData, monthFiles = {}) {
   // 店舗別（売上降順ソート）
   const entries = Object.entries(storeData)
     .map(([shortName, data]) => ({
-      name: SHORT_TO_FULL[shortName] || shortName,
+      name: SHORT_TO_FULL[shortName] || displayNameForKey(shortName),
       netSales: data.netSales,
       transactions: data.transactions,
       avgPrice: data.transactions > 0 ? Math.round(data.netSales / data.transactions) : 0,
@@ -291,4 +316,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { buildWeeklyMessage };
+module.exports = { buildWeeklyMessage, canonKey, displayNameForKey };

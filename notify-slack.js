@@ -9,6 +9,15 @@ const fs = require('fs');
 const path = require('path');
 const { verifyGate, buildWarningBanner } = require('./verify-gate');
 const { isTaxExclusive } = require('./config');
+const { slackName } = require('./store-names');
+
+// slug → Slack表示名（投稿日が2026-11-01以降なら正式表記。マスタに無ければ月ファイル上の名前）
+let _masterBySlug = null;
+function slackNameBySlug(slug, fallbackName) {
+  if (!_masterBySlug) _masterBySlug = new Map(loadMasterStores().map(s => [s.slug, s]));
+  const st = _masterBySlug.get(slug);
+  return st ? slackName(st, fallbackName) : fallbackName;
+}
 
 const DATA_DIR = path.join(__dirname, 'data');
 
@@ -100,11 +109,11 @@ function loadMasterStores() {
   try {
     const m = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'stores_master.json'), 'utf-8'));
     if (Array.isArray(m.stores) && m.stores.length >= 2) {
-      return m.stores.map(s => ({ name: s.name, slug: s.slug }));
+      return m.stores.map(s => ({ name: s.name, slug: s.slug, salesChannelId: s.salesChannelId, officialName: s.officialName }));
     }
   } catch (e) { /* フォールバックへ */ }
   const { STORES } = require('./config');
-  return STORES.map(s => ({ name: s.name, slug: s.slug }));
+  return STORES.map(s => ({ name: s.name, slug: s.slug, salesChannelId: (s.url.match(/salesChannelId=([^&]+)/) || [])[1] || null }));
 }
 
 // 当回データに丸ごと存在しない（=取得失敗の疑い）店舗名を返す。'all'は除外。
@@ -112,7 +121,7 @@ function detectMissingStores(allData) {
   const present = new Set(Object.keys(allData.stores || {}));
   return loadMasterStores()
     .filter(s => s.slug !== 'all' && !present.has(s.slug))
-    .map(s => s.name);
+    .map(s => slackName(s, s.name));
 }
 
 // ── 前日の売上データを抽出 ──
@@ -124,7 +133,8 @@ function extractDailyData(allData, targetLabel) {
     const record = daily.find(d => d.label.includes(targetLabel));
     if (record) {
       results[slug] = {
-        name: store.name,
+        // Slack表示名は「投稿日」で決める（2026-11-01以降の投稿は正式表記。月ファイル側の名前はデータ月基準）
+        name: slackNameBySlug(slug, store.name),
         ...record,
       };
     }

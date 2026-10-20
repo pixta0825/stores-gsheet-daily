@@ -14,6 +14,7 @@
       "name": "Y!Y! hands 名古屋",
       "slug": "yyhands_nagoya",
       "salesChannelId": "681b02b1b7ac330049f2abcc",
+      "officialName": "YY名古屋",
       "prevName": "YY 名古屋"
     },
     {
@@ -21,6 +22,7 @@
       "name": "Y!Y! hands TOKYO",
       "slug": "yyhands_tokyo",
       "salesChannelId": "6940c8274683791b9ae0058a",
+      "officialName": "YY東京",
       "prevName": "YY 東京"
     },
     {
@@ -28,6 +30,7 @@
       "name": "YASUMI LAB 大阪",
       "slug": "yasumi_lab_osaka",
       "salesChannelId": "6940c855e0c48f1a99481d83",
+      "officialName": "LAB大阪",
       "prevName": "LAB 大阪"
     },
     {
@@ -35,6 +38,7 @@
       "name": "YASUMI LAB 名古屋",
       "slug": "yasumilab_nagoya",
       "salesChannelId": "6940c871bd17481c37c99de9",
+      "officialName": "LAB名古屋",
       "prevName": "LAB 名古屋"
     },
     {
@@ -42,6 +46,7 @@
       "name": "2525 jewelry 名古屋",
       "slug": "2525jewelry_nagoya",
       "salesChannelId": "6940c888bd17481c37c99dea",
+      "officialName": "2525",
       "prevName": "2525"
     },
     {
@@ -49,6 +54,7 @@
       "name": "Y!Y! hands 京都",
       "slug": "y_y_hands",
       "salesChannelId": "6960aeb4e7c5ab0aaa10f966",
+      "officialName": "YY京都",
       "prevName": "YY 京都"
     },
     {
@@ -56,6 +62,7 @@
       "name": "Coppice吉祥寺",
       "slug": "yyhands_shinjuku",
       "salesChannelId": "69ae3f7326307605f0833d2f",
+      "officialName": "吉祥寺",
       "closed": true,
       "closedAt": "2026-09-06",
       "closedReason": "催事終了"
@@ -64,13 +71,15 @@
       "rawName": "YASUMI LAB TOKYO",
       "name": "LAB 東京",
       "slug": "yasumilab_tokyo",
-      "salesChannelId": "69e03136d9e28df3f61314ba"
+      "salesChannelId": "69e03136d9e28df3f61314ba",
+      "officialName": "LAB東京"
     },
     {
       "rawName": "Y!Y! hands 渋谷",
       "name": "Y!Y! hands 渋谷",
       "slug": "yyhands_shibuya",
       "salesChannelId": "69f43c0d248f8c08e31ba380",
+      "officialName": "YY渋谷",
       "prevName": "YY 渋谷"
     },
     {
@@ -78,13 +87,15 @@
       "name": "Y!Y! hands 原宿",
       "slug": "yyhands_harajuku",
       "salesChannelId": "69f43d5cfc56600a9d3552c2",
+      "officialName": "YY原宿",
       "prevName": "YY 原宿"
     },
     {
       "rawName": "YASUMI LAB 代官山",
       "name": "LAB 代官山",
       "slug": "yasumi_lab",
-      "salesChannelId": "6a4f4ad412d0390a4fe48186"
+      "salesChannelId": "6a4f4ad412d0390a4fe48186",
+      "officialName": "LAB代官山"
     }
   ]
 }
