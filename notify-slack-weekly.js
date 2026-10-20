@@ -235,7 +235,14 @@ function buildWeeklyMessage(monday, sunday, storeData, monthFiles = {}) {
   }
 
   // 店舗別（売上降順ソート）
+  // 閉店店舗（吉祥寺）は期間の売上0・件数0なら載せない。売上があれば載せて警告（REQ-0722）
+  const closedKeys = new Set(MASTER_STORES.filter(s => s.closed).map(s => officialNameOf(s)));
+  const revivedClosed = Object.entries(storeData).filter(([k, d]) => closedKeys.has(k) && (d.netSales !== 0 || d.transactions !== 0)).map(([k]) => displayNameForKey(k));
+  if (revivedClosed.length > 0) {
+    message += `:rotating_light: _閉店店舗に売上あり: ${revivedClosed.join('、')}（チャネルの使い回し・再開の可能性。要確認）_\n\n`;
+  }
   const entries = Object.entries(storeData)
+    .filter(([shortName, data]) => !(closedKeys.has(shortName) && data.netSales === 0 && data.transactions === 0))
     .map(([shortName, data]) => ({
       name: SHORT_TO_FULL[shortName] || displayNameForKey(shortName),
       netSales: data.netSales,

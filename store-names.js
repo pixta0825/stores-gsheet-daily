@@ -82,7 +82,32 @@ function aliasToOfficial(masterStores) {
   return m;
 }
 
+// ── 閉店店舗（stores_master.json の closed:true。現状は吉祥寺）の 0円行の非表示（REQ-0722追加）──
+// 「その期間の売上0・件数0なら出さない」。1円でも出たら使い回しの可能性があるので出したうえで警告する。
+// Slack本文は即日。月別スプレッドシートは月の途中で列・タブを消すと構造が崩れるので、
+// データの月が HIDE_CLOSED_SHEET_FROM 以降のファイルから（10月ファイルは触らない）。
+const HIDE_CLOSED_SHEET_FROM = process.env.HIDE_CLOSED_SHEET_FROM || '2026-11-01';
+
+function isClosedStore(store) { return !!(store && store.closed); }
+
+function isIdleRecord(rec) { return !rec || ((rec.netSales || 0) === 0 && (rec.transactions || 0) === 0); }
+
+// 月別シート用: 11月以降の月ファイルでは、閉店店舗のうち当月の売上・件数が0のものを外す。
+// allData が無い（空シート作成時）場合は外す。売上があれば残して警告ログを出す。
+function dropIdleClosedStores(stores, yyyymm, allData) {
+  const s = String(yyyymm);
+  if (`${s.slice(0, 4)}-${s.slice(4, 6)}-01` < HIDE_CLOSED_SHEET_FROM) return stores;
+  return stores.filter((st) => {
+    if (!isClosedStore(st)) return true;
+    const daily = (allData && allData.stores && allData.stores[st.slug] && allData.stores[st.slug].data && allData.stores[st.slug].data.daily) || [];
+    const idle = daily.every(isIdleRecord);
+    if (!idle) console.warn(`⚠️ 閉店店舗「${st.name}」に売上あり（${s}）。使い回しの可能性があるため列を残します。要確認`);
+    return !idle;
+  });
+}
+
 module.exports = {
+  HIDE_CLOSED_SHEET_FROM, isClosedStore, isIdleRecord, dropIdleClosedStores,
   OFFICIAL_NAME_FROM, OFFICIAL_NAME_BY_CHANNEL_ID,
   officialNameOf, isOfficialYmd, isOfficialMonth, todayJstYmd,
   storesForMonth, slackName, aliasToOfficial,

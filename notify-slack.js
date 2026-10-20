@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const { verifyGate, buildWarningBanner } = require('./verify-gate');
 const { isTaxExclusive } = require('./config');
-const { slackName } = require('./store-names');
+const { slackName, isIdleRecord } = require('./store-names');
 
 // slug → Slack表示名（投稿日が2026-11-01以降なら正式表記。マスタに無ければ月ファイル上の名前）
 let _masterBySlug = null;
@@ -20,6 +20,12 @@ function slackNameBySlug(slug, fallbackName) {
 }
 
 const DATA_DIR = path.join(__dirname, 'data');
+
+function isClosedSlug(slug) {
+  if (!_masterBySlug) _masterBySlug = new Map(loadMasterStores().map(s => [s.slug, s]));
+  const st = _masterBySlug.get(slug);
+  return !!(st && st.closed);
+}
 
 // ── 店舗マスタの差分（新店追加・改称）を読む ──
 // sync-stores-master.js が毎日書き出す。無い/壊れている場合は黙って無視する
@@ -109,7 +115,7 @@ function loadMasterStores() {
   try {
     const m = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'stores_master.json'), 'utf-8'));
     if (Array.isArray(m.stores) && m.stores.length >= 2) {
-      return m.stores.map(s => ({ name: s.name, slug: s.slug, salesChannelId: s.salesChannelId, officialName: s.officialName }));
+      return m.stores.map(s => ({ name: s.name, slug: s.slug, salesChannelId: s.salesChannelId, officialName: s.officialName, closed: s.closed }));
     }
   } catch (e) { /* フォールバックへ */ }
   const { STORES } = require('./config');
@@ -120,7 +126,7 @@ function loadMasterStores() {
 function detectMissingStores(allData) {
   const present = new Set(Object.keys(allData.stores || {}));
   return loadMasterStores()
-    .filter(s => s.slug !== 'all' && !present.has(s.slug))
+    .filter(s => s.slug !== 'all' && !s.closed && !present.has(s.slug))   // 閉店店舗の不在は欠落扱いにしない
     .map(s => slackName(s, s.name));
 }
 
@@ -131,6 +137,8 @@ function extractDailyData(allData, targetLabel) {
   for (const [slug, store] of Object.entries(allData.stores)) {
     const daily = store.data?.daily || [];
     const record = daily.find(d => d.label.includes(targetLabel));
+    // 閉店店舗（吉祥寺）は、その日の売上0・件数0なら載せない（REQ-0722）。売上があれば載せて警告（buildSlackMessage）
+    if (record && isClosedSlug(slug) && isIdleRecord(record)) continue;
     if (record) {
       results[slug] = {
         // Slack表示名は「投稿日」で決める（2026-11-01以降の投稿は正式表記。月ファイル側の名前はデータ月基準）
@@ -240,6 +248,12 @@ function buildSlackMessage(targetLabel, dailyData, allData, options = {}) {
     message += `:rotating_light: _STORES取得失敗の疑い: ${options.missingStores.join('、')}（当日分が未反映の可能性。シートは前回値で復旧表示）_\n\n`;
   }
   message += `:bar_chart: _${year}年${targetLabel}${dayOfWeek} 売上レポート_\n\n`;
+
+  // 閉店店舗に売上が出た場合は表示したうえで警告（チャネルの使い回し・再開の可能性。黙って捨てない）
+  const revivedClosed = Object.entries(dailyData).filter(([slug, d]) => slug !== 'all' && isClosedSlug(slug) && !isIdleRecord(d));
+  if (revivedClosed.length > 0) {
+    message += `:rotating_light: _閉店店舗に売上あり: ${revivedClosed.map(([, d]) => d.name).join('、')}（チャネルの使い回し・再開の可能性。要確認）_\n\n`;
+  }
 
   // 店舗構成が変わった日は必ず本文で知らせる（黙って増減・改称させない）。
   // sync-stores-master.js が公式APIと突き合わせて書き出した差分を読む。
