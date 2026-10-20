@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-19T23:10:20.916Z",
+  "generatedAt": "2026-10-20T23:10:23.830Z",
   "source": "STORES 公式 retail API /sales_channels（sync-stores-master.js）",
   "storeCount": 12,
   "stores": [
@@ -91,11 +91,12 @@
       "prevName": "YY 原宿"
     },
     {
-      "rawName": "YASUMI LAB 代官山",
-      "name": "LAB 代官山",
+      "rawName": "YASUMI LAB 代官山・恵比寿店",
+      "name": "YASUMI LAB 代官山・恵比寿店",
       "slug": "yasumi_lab",
       "salesChannelId": "6a4f4ad412d0390a4fe48186",
-      "officialName": "LAB代官山"
+      "officialName": "LAB代官山",
+      "prevName": "LAB 代官山"
     }
   ]
 }
