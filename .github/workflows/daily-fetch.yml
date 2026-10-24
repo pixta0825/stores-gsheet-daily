@@ -44,7 +44,7 @@ on:
 
 jobs:
   fetch-and-upload:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     # 日次実行のなかで店舗マスタ（data/stores_master.json）を公式APIと同期し、
     # 変化があればコミットして戻すため書き込み権限が必要。
