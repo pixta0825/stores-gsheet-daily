@@ -66,9 +66,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright Chromium
-        if: ${{ github.event.inputs.create_only != 'true' && github.event.inputs.recover_target_month == '' && github.event.inputs.clear_month == '' && github.event.inputs.weekly_repost != 'true' }}
-        run: npx playwright install --with-deps chromium
+      # Playwright Chromium のインストールは廃止（REQ-0810）。
+      # 日次・バックフィルとも公式API（fetch-stores-api.js）で取得し、ブラウザは使わない。
+      # 2026-11-01 朝、この手順が15分止まって時間切れ→10/31分が欠落した。
+      # 旧スクレイピング（STORES_FETCH=scrape）に切り戻すときだけ
+      # `npx playwright install --with-deps chromium` を戻すこと。
 
       - name: Create empty spreadsheet only
         if: ${{ github.event.inputs.create_only == 'true' }}
