@@ -63,11 +63,14 @@ async function main() {
 
     // Step 0: 月初なら前月を締める
     // 月末日は完全データが翌月1日にしか取れず、その時には当月シートへ書かれてしまうため、
-    // 毎月1日の実行時のみ、前月を last_month レンジで再取得して前月シートを上書きする。
+    // 毎月1〜3日の実行時に、前月を last_month レンジで再取得して前月シートを上書きする。
+    // 以前は1日だけだったが、1日の実行が止まると前月末日分が二度と取れず欠落した
+    // （2026-11-01 打ち切り→10/31分が欠落・REQ-0810）。同じ前月を上書きするだけなので何度走っても冪等。
     // Slack投稿はしない（当月の前日分のみ後段で投稿）。失敗しても当月処理は継続する。
+    const PREV_MONTH_CLOSE_DAYS = 3;
     if (!DRY_RUN) {
       const jstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
-      if (jstNow.getDate() === 1) {
+      if (jstNow.getDate() <= PREV_MONTH_CLOSE_DAYS) {
         const prevMonth = computePrevMonth();
         log(`📅 月初検知 → 前月(${prevMonth})の締め処理を先に実行`);
         try {
