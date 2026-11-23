@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-22T23:10:10.090Z",
+  "generatedAt": "2026-11-23T07:41:07.426Z",
   "source": "STORES 公式 retail API /sales_channels（sync-stores-master.js）",
   "storeCount": 12,
   "stores": [
@@ -62,11 +62,8 @@
       "name": "ぬいぬいぬい",
       "slug": "yyhands_shinjuku",
       "salesChannelId": "69ae3f7326307605f0833d2f",
-      "officialName": "吉祥寺",
-      "prevName": "Coppice吉祥寺",
-      "closed": true,
-      "closedAt": "2026-09-06",
-      "closedReason": "催事終了"
+      "officialName": "YY新宿",
+      "prevName": "Coppice吉祥寺"
     },
     {
       "rawName": "YASUMI LAB TOKYO",
