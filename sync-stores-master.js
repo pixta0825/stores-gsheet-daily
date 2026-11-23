@@ -77,6 +77,9 @@ const DISPLAY_NAME_OVERRIDES = {
   // 万一戻ったときに旧表記へ逆戻りしないよう、表記ルールだけ残す。
   'Y! Y! hands大阪': 'YY 大阪',
   'Y! Y! hands新宿': 'YY 新宿',
+  // STORES上の現名「ぬいぬいぬい」（69ae3f73…）。10月以前の月ファイル（8〜9月の催事）は従来どおり吉祥寺系の名前で残す。
+  // 11月以降の月は store-names.js が salesChannelId でYY新宿へ切り替える（REQ-1017）。
+  'ぬいぬいぬい': 'Coppice吉祥寺',
   // 'Coppice吉祥寺' はAPIの生名をそのまま使う（上書き不要）
 };
 
