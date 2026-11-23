@@ -24,11 +24,21 @@ const OFFICIAL_NAME_BY_CHANNEL_ID = {
   '6940c871bd17481c37c99de9': 'LAB名古屋',
   '6940c888bd17481c37c99dea': '2525',
   '6960aeb4e7c5ab0aaa10f966': 'YY京都',
-  '69ae3f7326307605f0833d2f': '吉祥寺',     // Coppice吉祥寺（旧YY新宿のチャネル・営業終了）
+  // 2026-11-23 恩田承認・REQ-1017・新宿店×奇妙区: このチャネル（元YY新宿→Coppice吉祥寺→改称「ぬいぬいぬい」）を
+  // 2026年11月分以降はYY新宿として扱う。2026-08〜09月の催事「Coppice吉祥寺」分は月ファイルが
+  // 10月以前＝従来表記（storesForMonth の月判定）のため吉祥寺のまま残る。
+  '69ae3f7326307605f0833d2f': 'YY新宿',
   '69e03136d9e28df3f61314ba': 'LAB東京',
   '69f43c0d248f8c08e31ba380': 'YY渋谷',
   '69f43d5cfc56600a9d3552c2': 'YY原宿',
   '6a4f4ad412d0390a4fe48186': 'LAB代官山',
+};
+
+// 正式月ファイルで「直前まで別の正式表記で作られていたタブ」の旧名（salesChannelId → 旧正式表記）。
+// 11月シートに11/21〜22の売上が「吉祥寺」タブで入ってしまったため、upload-gsheet の自動改名で
+// 「吉祥寺」→「YY新宿」へ履歴ごと引き継ぐ（新タブを作って旧タブを孤児にしない）。旧名タブが無ければ何もしない。
+const PREV_OFFICIAL_NAME_BY_CHANNEL_ID = {
+  '69ae3f7326307605f0833d2f': '吉祥寺',   // REQ-1017
 };
 
 function officialNameOf(store) {
@@ -60,7 +70,7 @@ function storesForMonth(stores, yyyymm) {
   return stores.map((s) => {
     const off = officialNameOf(s);
     if (!off || off === s.name) return s;
-    return { ...s, name: off, prevName: s.name };
+    return { ...s, name: off, prevName: (s.salesChannelId && PREV_OFFICIAL_NAME_BY_CHANNEL_ID[s.salesChannelId]) || s.name };
   });
 }
 

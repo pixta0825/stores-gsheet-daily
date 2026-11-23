@@ -90,9 +90,9 @@ const DISPLAY_NAME_OVERRIDES = {
 //
 // 再開したらその行を消せば、翌日の sync で自動的に取得対象へ戻る。
 const CLOSED_SALES_CHANNELS = {
-  // Coppice吉祥寺（slug: yyhands_shinjuku）: 催事出店。2026-09-06 をもって終了。
-  // 2026-09-14 恩田確認「吉祥寺は催事終了。今後は売上発生せず」(REQ-0488)
-  '69ae3f7326307605f0833d2f': { closedAt: '2026-09-06', reason: '催事終了' },
+  // （空）Coppice吉祥寺（slug: yyhands_shinjuku・channel 69ae3f73…）は催事終了で閉じていたが、
+  // 2026-11-23 恩田承認・REQ-1017・新宿店×奇妙区コラボ（STORES上の名称「ぬいぬいぬい」・11/21〜）で再開し、
+  // 2026年11月分以降はYY新宿として扱う（store-names.js）。閉店扱い（旧: closedAt 2026-09-06 催事終了・REQ-0488）を外した。
 };
 
 /** 営業終了チャネルなら closed 印を付けて返す */
